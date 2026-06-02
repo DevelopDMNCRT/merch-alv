@@ -289,6 +289,31 @@ const shippingRules = ref([])
 const shippingErrorModalOpen = ref(false)
 
 const costoEnvio = computed(() => {
+  // 1. Siempre validar si la zona tiene cobertura primero.
+  if (!form.pais) return null;
+
+  const validRules = shippingRules.value.filter(r => r.paises && r.paises.includes(form.pais));
+  if (validRules.length === 0) return null;
+
+  let baseShippingPrice = null;
+
+  if (form.pais === 'México') {
+    const exactStateMatch = validRules.find(r => r.estados && r.estados.includes(form.estado));
+    if (exactStateMatch) {
+      baseShippingPrice = Number(exactStateMatch.precio);
+    } else {
+      const genericCountryMatch = validRules.find(r => !r.estados || r.estados.length === 0);
+      if (genericCountryMatch) {
+        baseShippingPrice = Number(genericCountryMatch.precio);
+      } else {
+        return null; // No hay regla para este estado y tampoco hay genérica para México
+      }
+    }
+  } else {
+    baseShippingPrice = Number(validRules[0].precio);
+  }
+
+  // 2. Si la zona es válida, revisamos si algún producto tiene "Envío Especial" que sea el REY
   let specialShipping = 0;
   for (const item of cartState.items) {
     const itemEnvio = Number(item.envio_especial || 0);
@@ -297,24 +322,12 @@ const costoEnvio = computed(() => {
     }
   }
 
-  if (specialShipping > 0) return specialShipping;
-
-  if (!form.pais) return null;
-
-  const validRules = shippingRules.value.filter(r => r.paises && r.paises.includes(form.pais));
-  if (validRules.length === 0) return null;
-
-  if (form.pais === 'México') {
-    const exactStateMatch = validRules.find(r => r.estados && r.estados.includes(form.estado));
-    if (exactStateMatch) return Number(exactStateMatch.precio);
-    
-    const genericCountryMatch = validRules.find(r => !r.estados || r.estados.length === 0);
-    if (genericCountryMatch) return Number(genericCountryMatch.precio);
-
-    return null;
+  // Si hay envío especial, este se impone. Si no, usamos el base.
+  if (specialShipping > 0) {
+    return specialShipping;
   }
-  
-  return Number(validRules[0].precio);
+
+  return baseShippingPrice;
 })
 
 const isShippingSupported = computed(() => costoEnvio.value !== null)
