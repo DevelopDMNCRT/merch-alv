@@ -227,7 +227,7 @@
               </svg>
               <h3 class="text-xl font-bold mb-2">Envío No Disponible</h3>
               <p class="text-gray-600 mb-6">Lo sentimos, no contamos con tarifas de envío configuradas para tu zona actual. Por favor intenta con otra dirección.</p>
-              <button @click="shippingErrorModalOpen = false" class="confirm-location-btn w-full">Entendido</button>
+              <button @click="shippingErrorModalOpen = false" class="error-modal-btn w-full">Entendido</button>
             </div>
           </div>
         </div>
@@ -1087,6 +1087,27 @@ textarea.form-input {
 
 .confirm-location-btn:hover {
   background: #27272a;
+}
+
+.error-modal-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 16px;
+  border-radius: 12px;
+  font-family: 'Jost', sans-serif;
+  font-weight: 800;
+  font-size: 1.1rem;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+}
+
+.error-modal-btn:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.3);
 }
 
 /* Payment Methods */
