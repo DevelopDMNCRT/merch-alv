@@ -787,6 +787,8 @@ app.put('/api/pedidos/:id/estado', async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Failed to update pedido estado' });
   }
+});
+
 // --- Envia.com API Integration ---
 
 const getEnviaPayload = async (pedido) => {
