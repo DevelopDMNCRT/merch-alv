@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Background: rounded black square -->
+  <rect width="64" height="64" rx="14" fill="#09090b"/>
+
+  <!-- Red accent top bar -->
+  <rect x="10" y="9" width="44" height="4" rx="2" fill="#ef4444"/>
+
+  <!-- MALV text centered -->
+  <text
+    x="32"
+    y="38"
+    font-family="'Jost', 'Arial Black', Arial, sans-serif"
+    font-size="22"
+    font-weight="900"
+    letter-spacing="-0.5"
+    fill="#ffffff"
+    text-anchor="middle"
+    dominant-baseline="middle"
+  >MALV</text>
+
+  <!-- ADM small label -->
+  <text
+    x="32"
+    y="52"
+    font-family="'Jost', Arial, sans-serif"
+    font-size="8"
+    font-weight="700"
+    letter-spacing="2"
+    fill="#ef4444"
+    text-anchor="middle"
+    dominant-baseline="middle"
+  >ADMIN</text>
+</svg>
