@@ -163,8 +163,8 @@ const shippingRules = ref<any[]>([]);
 const isModalOpen = ref(false);
 
 const form = reactive({
-  paises: [],
-  estados: [],
+  paises: [] as string[],
+  estados: [] as string[],
   precio: ''
 });
 
