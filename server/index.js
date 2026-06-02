@@ -787,6 +787,118 @@ app.put('/api/pedidos/:id/estado', async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Failed to update pedido estado' });
   }
+// --- Envia.com API Integration ---
+
+const getEnviaPayload = async (pedido) => {
+  let totalWeight = 0;
+  for (const item of pedido.items) {
+    const pRes = await pool.query('SELECT peso FROM products WHERE id = $1', [item.id]);
+    const pPeso = pRes.rows[0]?.peso ? parseFloat(pRes.rows[0].peso) : 1;
+    totalWeight += pPeso * item.cantidad;
+  }
+  if (totalWeight < 1) totalWeight = 1;
+
+  const map = {
+    'aguascalientes': 'AGS', 'baja california': 'BC', 'baja california sur': 'BCS',
+    'campeche': 'CAMP', 'chiapas': 'CHIS', 'chihuahua': 'CHIH', 'ciudad de mexico': 'CMX', 'ciudad de méxico': 'CMX', 'cdmx': 'CMX',
+    'coahuila': 'COAH', 'colima': 'COL', 'durango': 'DGO', 'estado de mexico': 'MEX', 'estado de méxico': 'MEX',
+    'guanajuato': 'GTO', 'guerrero': 'GRO', 'hidalgo': 'HGO', 'jalisco': 'JAL', 'michoacan': 'MICH', 'michoacán': 'MICH',
+    'morelos': 'MOR', 'nayarit': 'NAY', 'nuevo leon': 'NL', 'nuevo león': 'NL', 'oaxaca': 'OAX', 'puebla': 'PUE',
+    'queretaro': 'QRO', 'querétaro': 'QRO', 'quintana roo': 'ROO', 'san luis potosi': 'SLP', 'san luis potosí': 'SLP',
+    'sinaloa': 'SIN', 'sonora': 'SON', 'tabasco': 'TAB', 'tamaulipas': 'TAMP', 'tlaxcala': 'TLAX', 'veracruz': 'VER',
+    'yucatan': 'YUC', 'yucatán': 'YUC', 'zacatecas': 'ZAC'
+  };
+  const stateCode = map[(pedido.estado_env || '').toLowerCase().trim()] || 'JAL';
+
+  return {
+    origin: {
+      name: 'Amigo Merch', company: 'Amigo Merch', email: 'hola@amigomerch.mx', phone: '3312345678',
+      street: 'Bodega Principal', number: '1', district: 'Centro', city: 'Zapopan', state: 'JAL', country: 'MX', postalCode: '45200', reference: ''
+    },
+    destination: {
+      name: pedido.nombre, company: '', email: pedido.correo || 'hola@amigomerch.mx', phone: pedido.telefono || '3300000000',
+      street: pedido.calle || 'Conocida', number: pedido.num_ext || 'SN', district: pedido.colonia || 'Centro', city: pedido.ciudad || 'Ciudad', state: stateCode, country: pedido.pais === 'Mexico' ? 'MX' : 'MX', postalCode: pedido.cp || '00000', reference: pedido.notas || ''
+    },
+    packages: [{
+      content: 'Ropa y Accesorios', amount: 1, type: 'box', weight: totalWeight, insurance: 0, declaredValue: parseFloat(pedido.total), weightUnit: 'KG', lengthUnit: 'CM', dimensions: { length: 30, width: 20, height: 10 }
+    }],
+    settings: { printFormat: 'PDF', printSize: 'STOCK_4X6' }
+  };
+};
+
+app.post('/api/pedidos/:id/cotizar-envio', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query('SELECT * FROM pedidos WHERE id = $1', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
+    
+    const payload = await getEnviaPayload(rows[0]);
+    // Request basic carriers to quote. In real scenario we could map all or specific ones
+    const carriers = ['fedex', 'dhl', 'estafeta', 'redpack'];
+    const rates = [];
+
+    // Cotizamos uno por uno para asegurar que regresen resultados (algunas configs de Envia requieren enviar carrier en /ship/rate)
+    for (const carrier of carriers) {
+      try {
+        const ratePayload = { ...payload, shipment: { carrier, type: 1 } };
+        const response = await fetch(`${process.env.ENVIA_API_URL}/ship/rate/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.ENVIA_API_KEY}` },
+          body: JSON.stringify(ratePayload)
+        });
+        const data = await response.json();
+        if (data.meta === 'rate' && data.data && data.data.length > 0) {
+          rates.push(...data.data);
+        }
+      } catch (e) { console.error(`Error rating ${carrier}:`, e); }
+    }
+
+    res.json({ rates });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to quote shipping' });
+  }
+});
+
+app.post('/api/pedidos/:id/generar-guia', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { carrier, service } = req.body;
+    
+    const { rows } = await pool.query('SELECT * FROM pedidos WHERE id = $1', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
+    
+    if (rows[0].tracking_number) {
+      return res.status(400).json({ error: 'Este pedido ya tiene una guía generada' });
+    }
+
+    const payload = await getEnviaPayload(rows[0]);
+    payload.shipment = { carrier, service, type: 1 };
+
+    const response = await fetch(`${process.env.ENVIA_API_URL}/ship/generate/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.ENVIA_API_KEY}` },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+
+    if (data.meta !== 'generate') {
+      return res.status(400).json({ error: 'Error al generar la guía con Envia.com', details: data.error || data });
+    }
+
+    const trackingNumber = data.data[0].trackingNumber;
+    const guiaUrl = data.data[0].label;
+
+    const result = await pool.query(
+      'UPDATE pedidos SET tracking_number = $1, guia_url = $2 WHERE id = $3 RETURNING *',
+      [trackingNumber, guiaUrl, id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to generate label' });
+  }
 });
 
 // --- Boletines CRUD ---

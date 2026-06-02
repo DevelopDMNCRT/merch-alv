@@ -195,6 +195,65 @@
           </div>
         </div>
 
+        <!-- ═══ LOGÍSTICA Y ENVÍOS (Envia.com) ═══ -->
+        <div class="col-span-12 lg:col-span-4 rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] mt-5 lg:mt-0">
+          <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+            <h2 class="text-base font-semibold text-gray-800 dark:text-white/90 flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-500"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              Logística (Envia.com)
+            </h2>
+          </div>
+
+          <div class="px-5 py-6">
+            <!-- Caso 1: Ya tiene guía -->
+            <div v-if="pedido.tracking_number" class="flex flex-col gap-4">
+              <div class="flex flex-col items-center justify-center p-4 rounded-xl border border-success-200 bg-success-50 dark:border-success-500/20 dark:bg-success-500/10">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-success-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <p class="text-sm font-medium text-success-800 dark:text-success-400">Guía Generada</p>
+                <p class="text-lg font-bold font-mono text-gray-900 dark:text-white mt-1">{{ pedido.tracking_number }}</p>
+              </div>
+              <a :href="pedido.guia_url" target="_blank" class="w-full flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                Imprimir PDF
+              </a>
+            </div>
+
+            <!-- Caso 2: No tiene guía -->
+            <div v-else class="flex flex-col gap-4">
+              <p class="text-sm text-gray-600 dark:text-gray-400">Aún no se ha generado guía para este pedido.</p>
+              
+              <button @click="cotizarEnvio" :disabled="cotizandoEnvio || rates.length > 0" class="w-full flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg v-if="cotizandoEnvio" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 0 0-9-9"/><circle cx="12" cy="12" r="9" stroke-opacity="0.3"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 16 16 12 12 8"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                {{ cotizandoEnvio ? 'Cotizando...' : 'Cotizar Opciones de Envío' }}
+              </button>
+
+              <div v-if="rates.length > 0" class="mt-4 flex flex-col gap-3">
+                <p class="text-xs font-semibold text-gray-500 uppercase">Opciones Disponibles</p>
+                <div class="flex flex-col gap-2 max-h-60 overflow-y-auto custom-scrollbar">
+                  <label v-for="(rate, idx) in rates" :key="idx" class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors" :class="selectedRate?.carrier === rate.carrier && selectedRate?.service === rate.service ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'">
+                    <input type="radio" name="rate" :value="rate" v-model="selectedRate" class="mt-1 text-brand-500 focus:ring-brand-500" />
+                    <div class="flex-1 min-w-0">
+                      <div class="flex justify-between items-center">
+                        <span class="font-semibold text-gray-900 dark:text-white capitalize text-sm">{{ rate.carrierDescription || rate.carrier }}</span>
+                        <span class="font-bold text-brand-600 dark:text-brand-400">${{ rate.totalPrice.toLocaleString('es-MX') }}</span>
+                      </div>
+                      <p class="text-xs text-gray-500 truncate mt-0.5">{{ rate.serviceDescription || rate.service }}</p>
+                      <p class="text-xs text-brand-500 mt-1 font-medium">Llega en: {{ rate.deliveryEstimate }}</p>
+                    </div>
+                  </label>
+                </div>
+
+                <button @click="generarGuia" :disabled="!selectedRate || generandoGuia" class="mt-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  <svg v-if="generandoGuia" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 0 0-9-9"/><circle cx="12" cy="12" r="9" stroke-opacity="0.3"/></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  {{ generandoGuia ? 'Generando Guía...' : 'Generar Guía Oficial' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -236,6 +295,12 @@ const estadoPendiente = ref('');
 const savingEstado    = ref(false);
 const toast = ref({ show: false, type: 'success', msg: '' });
 
+// Envia.com states
+const cotizandoEnvio = ref(false);
+const generandoGuia = ref(false);
+const rates = ref([]);
+const selectedRate = ref(null);
+
 function showToast(type, msg) {
   toast.value = { show: true, type, msg };
   setTimeout(() => { toast.value.show = false; }, 3500);
@@ -266,7 +331,9 @@ const fetchPedido = async () => {
       nota: data.notas,
       items: data.items || [],
       envio: parseFloat(data.envio),
-      total: parseFloat(data.total)
+      total: parseFloat(data.total),
+      tracking_number: data.tracking_number,
+      guia_url: data.guia_url
     };
     // Inicializar el estado pendiente con el valor guardado en BD
     estadoPendiente.value = data.estado;
@@ -304,6 +371,63 @@ const guardarEstado = async () => {
     showToast('error', 'Error al guardar el estado. Intenta nuevamente.');
   } finally {
     savingEstado.value = false;
+  }
+};
+
+const cotizarEnvio = async () => {
+  if (!pedido.value) return;
+  cotizandoEnvio.value = true;
+  rates.value = [];
+  selectedRate.value = null;
+  try {
+    const res = await fetch(`/api/pedidos/${pedido.value.id}/cotizar-envio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al cotizar');
+    
+    if (data.rates && data.rates.length > 0) {
+      // Filtrar y ordenar por precio
+      rates.value = data.rates.sort((a, b) => a.totalPrice - b.totalPrice);
+      showToast('success', `${rates.value.length} opciones encontradas.`);
+    } else {
+      showToast('error', 'No se encontraron tarifas para este código postal.');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('error', err.message);
+  } finally {
+    cotizandoEnvio.value = false;
+  }
+};
+
+const generarGuia = async () => {
+  if (!pedido.value || !selectedRate.value) return;
+  generandoGuia.value = true;
+  try {
+    const payload = {
+      carrier: selectedRate.value.carrier,
+      service: selectedRate.value.service
+    };
+    const res = await fetch(`/api/pedidos/${pedido.value.id}/generar-guia`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al generar la guía');
+    
+    // Update local state
+    pedido.value.tracking_number = data.tracking_number;
+    pedido.value.guia_url = data.guia_url;
+    
+    showToast('success', '¡Guía generada exitosamente!');
+  } catch (err) {
+    console.error(err);
+    showToast('error', err.message);
+  } finally {
+    generandoGuia.value = false;
   }
 };
 
