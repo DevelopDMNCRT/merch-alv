@@ -248,7 +248,7 @@ const sortedStores = computed(() => {
 
 .overlay-btn {
   background: var(--bg-color);
-  color: var(--primary-color);
+  color: white;
   border: none;
   padding: 12px 24px;
   border-radius: 24px;

@@ -905,6 +905,46 @@ app.post('/api/pedidos/:id/generar-guia', async (req, res) => {
   }
 });
 
+// Webhook para Envia.com
+app.post('/api/webhooks/envia', async (req, res) => {
+  try {
+    const payload = req.body;
+    console.log('Webhook Envia recibido:', JSON.stringify(payload, null, 2));
+
+    // Responder rápido para evitar timeouts
+    res.status(200).send('OK');
+
+    // Procesar estado
+    const data = payload.data || payload;
+    let trackingNumber = data.trackingNumber || data.tracking_number;
+    let status = data.status || data.state || data.status_description || '';
+    
+    if (trackingNumber && typeof trackingNumber === 'string') {
+      const { rows } = await pool.query('SELECT * FROM pedidos WHERE tracking_number = $1', [trackingNumber]);
+      if (rows.length > 0) {
+        const pedido = rows[0];
+        status = status.toString().toLowerCase();
+        
+        let nuevoEstado = null;
+        // Palabras clave de estados finales
+        if (status.includes('deliver') || status.includes('entregad')) {
+          nuevoEstado = 'Completado';
+        } else if (status.includes('exception') || status.includes('return') || status.includes('cancel') || status.includes('devolución')) {
+          nuevoEstado = 'Fallido';
+        }
+
+        if (nuevoEstado && pedido.estado !== nuevoEstado) {
+          await pool.query('UPDATE pedidos SET estado = $1 WHERE id = $2', [nuevoEstado, pedido.id]);
+          await pool.query('INSERT INTO pedido_historial (pedido_id, estado) VALUES ($1, $2)', [pedido.id, nuevoEstado]);
+          console.log(`[Webhook] Pedido ${pedido.id} actualizado a ${nuevoEstado} por tracking ${trackingNumber}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error en webhook de envia:', err);
+  }
+});
+
 // --- Boletines CRUD ---
 
 // GET all boletines

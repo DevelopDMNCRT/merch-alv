@@ -387,7 +387,7 @@ onMounted(() => {
 
 .overlay-btn {
   background: var(--bg-color);
-  color: var(--primary-color);
+  color: white;
   border: none;
   padding: 14px 28px;
   border-radius: 24px;
@@ -405,7 +405,7 @@ onMounted(() => {
 
 .overlay-btn:hover {
   background: var(--secondary-color);
-  color: var(--text-main);
+  color: white;
 }
 
 .product-info {

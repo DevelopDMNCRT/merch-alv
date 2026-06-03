@@ -994,7 +994,7 @@ textarea.form-input {
 
 .btn-location:hover {
   background: var(--primary-color);
-  color: white;
+  color: var(--button-text);
   border-color: var(--primary-color);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
@@ -1083,7 +1083,7 @@ textarea.form-input {
 
 .confirm-location-btn {
   background: var(--primary-color);
-  color: white;
+  color: var(--button-text);
   border: none;
   padding: 16px;
   border-radius: 12px;
@@ -1097,6 +1097,7 @@ textarea.form-input {
 
 .confirm-location-btn:hover {
   background: #27272a;
+  color: white;
 }
 
 .error-modal-btn {
@@ -1153,7 +1154,7 @@ textarea.form-input {
 
 .pay-btn {
   background: var(--primary-color);
-  color: white;
+  color: var(--button-text);
   border: none;
   border-radius: 16px;
   padding: 20px;
@@ -1166,6 +1167,7 @@ textarea.form-input {
 
 .pay-btn:hover {
   background: #27272a;
+  color: white;
   transform: translateY(-2px);
 }
 

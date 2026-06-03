@@ -1019,8 +1019,9 @@ onMounted(async () => {
 }
 
 .overlay-btn:hover {
-  background: var(--bg-color);
-  color: var(--primary-color);
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
 }
 
 .product-info {
