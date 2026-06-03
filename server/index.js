@@ -793,29 +793,31 @@ app.put('/api/pedidos/:id/estado', async (req, res) => {
 
 const getEnviaPayload = async (pedido) => {
   let totalWeight = 0;
-  for (const item of pedido.items) {
-    const pRes = await pool.query('SELECT peso FROM products WHERE id = $1', [item.id]);
+  for (const item of (pedido.items || [])) {
+    const prodId = item.producto_id || item.id;
+    if (isNaN(parseInt(prodId, 10))) continue; // Evitar error de postgres si el ID es un string alfa
+    const pRes = await pool.query('SELECT peso FROM products WHERE id = $1', [parseInt(prodId, 10)]);
     const pPeso = pRes.rows[0]?.peso ? parseFloat(pRes.rows[0].peso) : 1;
     totalWeight += pPeso * item.cantidad;
   }
   if (totalWeight < 1) totalWeight = 1;
 
   const map = {
-    'aguascalientes': 'AGS', 'baja california': 'BC', 'baja california sur': 'BCS',
-    'campeche': 'CAMP', 'chiapas': 'CHIS', 'chihuahua': 'CHIH', 'ciudad de mexico': 'CMX', 'ciudad de méxico': 'CMX', 'cdmx': 'CMX',
-    'coahuila': 'COAH', 'colima': 'COL', 'durango': 'DGO', 'estado de mexico': 'MEX', 'estado de méxico': 'MEX',
-    'guanajuato': 'GTO', 'guerrero': 'GRO', 'hidalgo': 'HGO', 'jalisco': 'JAL', 'michoacan': 'MICH', 'michoacán': 'MICH',
-    'morelos': 'MOR', 'nayarit': 'NAY', 'nuevo leon': 'NL', 'nuevo león': 'NL', 'oaxaca': 'OAX', 'puebla': 'PUE',
-    'queretaro': 'QRO', 'querétaro': 'QRO', 'quintana roo': 'ROO', 'san luis potosi': 'SLP', 'san luis potosí': 'SLP',
-    'sinaloa': 'SIN', 'sonora': 'SON', 'tabasco': 'TAB', 'tamaulipas': 'TAMP', 'tlaxcala': 'TLAX', 'veracruz': 'VER',
-    'yucatan': 'YUC', 'yucatán': 'YUC', 'zacatecas': 'ZAC'
+    'aguascalientes': 'AG', 'baja california': 'BC', 'baja california sur': 'BS',
+    'campeche': 'CM', 'chiapas': 'CS', 'chihuahua': 'CH', 'ciudad de mexico': 'CX', 'ciudad de méxico': 'CX', 'cdmx': 'CX',
+    'coahuila': 'CO', 'colima': 'CL', 'durango': 'DG', 'estado de mexico': 'EM', 'estado de méxico': 'EM',
+    'guanajuato': 'GT', 'guerrero': 'GR', 'hidalgo': 'HG', 'jalisco': 'JA', 'michoacan': 'MI', 'michoacán': 'MI',
+    'morelos': 'MO', 'nayarit': 'NA', 'nuevo leon': 'NL', 'nuevo león': 'NL', 'oaxaca': 'OA', 'puebla': 'PU',
+    'queretaro': 'QT', 'querétaro': 'QT', 'quintana roo': 'QR', 'san luis potosi': 'SL', 'san luis potosí': 'SL',
+    'sinaloa': 'SI', 'sonora': 'SO', 'tabasco': 'TB', 'tamaulipas': 'TM', 'tlaxcala': 'TL', 'veracruz': 'VE',
+    'yucatan': 'YU', 'yucatán': 'YU', 'zacatecas': 'ZA'
   };
-  const stateCode = map[(pedido.estado_env || '').toLowerCase().trim()] || 'JAL';
+  const stateCode = map[(pedido.estado_env || '').toLowerCase().trim()] || 'JA';
 
   return {
     origin: {
       name: 'Amigo Merch', company: 'Amigo Merch', email: 'hola@amigomerch.mx', phone: '3312345678',
-      street: 'Bodega Principal', number: '1', district: 'Centro', city: 'Zapopan', state: 'JAL', country: 'MX', postalCode: '45200', reference: ''
+      street: 'Bodega Principal', number: '1', district: 'Centro', city: 'Zapopan', state: 'JA', country: 'MX', postalCode: '45200', reference: ''
     },
     destination: {
       name: pedido.nombre, company: '', email: pedido.correo || 'hola@amigomerch.mx', phone: pedido.telefono || '3300000000',

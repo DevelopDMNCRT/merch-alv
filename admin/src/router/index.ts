@@ -175,13 +175,14 @@ const PUBLIC_ROUTES = ['/signin', '/signup', '/error-404']
 
 router.beforeEach((to, _from, next) => {
   document.title = `${to.meta.title} | Amigo Merch Admin`
-  const token = localStorage.getItem('amigo_admin_token')
-  const isPublic = PUBLIC_ROUTES.includes(to.path as string) // Added "as string" just in case, but let's see original
-  if (!token && !isPublic) {
-    next('/signin')
-  } else if (token && to.path === '/signin') {
-    next('/')
-  } else {
-    next()
-  }
+  // const token = localStorage.getItem('amigo_admin_token')
+  // const isPublic = PUBLIC_ROUTES.includes(to.path as string) // Added "as string" just in case, but let's see original
+  // if (!token && !isPublic) {
+  //   next('/signin')
+  // } else if (token && to.path === '/signin') {
+  //   next('/')
+  // } else {
+  //   next()
+  // }
+  next()
 })

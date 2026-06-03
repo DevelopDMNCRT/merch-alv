@@ -779,18 +779,28 @@ const submitCardPayment = async () => {
       return;
     }
 
-    const state = cardFieldsInstance.getState();
-    const isValidCard = state && state.isFormValid !== undefined 
-      ? state.isFormValid 
-      : (state && state.fields && state.fields.number && state.fields.number.isValid && state.fields.expiry.isValid && state.fields.cvv.isValid);
+    const state = await cardFieldsInstance.getState();
+    console.log('PayPal CardFields State:', state);
+
+    // Revisar propiedades correctas de PayPal JS SDK (cardNumber, expirationDate, cvv)
+    const isValidCard = state && state.isFormValid;
       
     if (!isValidCard) {
-      alert('Por favor verifica los datos de tu tarjeta. Asegúrate de que el número, fecha y CVV estén completos y correctos.');
+      let invalidFields = [];
+      if (state && state.fields) {
+        if (state.fields.cardNumber && !state.fields.cardNumber.isValid) invalidFields.push('Número');
+        if (state.fields.expirationDate && !state.fields.expirationDate.isValid) invalidFields.push('Fecha');
+        if (state.fields.cvv && !state.fields.cvv.isValid) invalidFields.push('CVV');
+        if (state.fields.name && !state.fields.name.isValid) invalidFields.push('Nombre (si lo requiere PayPal interno)');
+      }
+      alert(`PayPal indica que el formulario es inválido.\nCampos con error: ${invalidFields.join(', ')}\n\nEstado Interno de PayPal:\n${JSON.stringify(state, null, 2)}`);
       return;
     }
-
+    
     loading.value = true;
-    await cardFieldsInstance.submit();
+    await cardFieldsInstance.submit({
+      cardholderName: formCardholderName.value
+    });
   } catch (err) {
     console.error('Submit Error Detallado:', err);
     alert('Error interno al procesar: ' + (err.message || JSON.stringify(err)));

@@ -416,7 +416,19 @@ const generarGuia = async () => {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al generar la guía');
+    if (!res.ok) {
+      let errorMsg = data.error || 'Error al generar la guía';
+      if (data.details) {
+        if (data.details.error && data.details.error.message) {
+          errorMsg = data.details.error.message;
+        } else if (typeof data.details === 'string') {
+          errorMsg += `: ${data.details}`;
+        } else {
+          errorMsg += `: ${JSON.stringify(data.details)}`;
+        }
+      }
+      throw new Error(errorMsg);
+    }
     
     // Update local state
     pedido.value.tracking_number = data.tracking_number;
