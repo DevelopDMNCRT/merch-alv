@@ -906,6 +906,10 @@ app.post('/api/pedidos/:id/generar-guia', async (req, res) => {
 });
 
 // Webhook para Envia.com
+app.get('/api/webhooks/envia', (req, res) => {
+  res.status(200).send('Webhook Envia GET OK');
+});
+
 app.post('/api/webhooks/envia', async (req, res) => {
   try {
     const payload = req.body;
