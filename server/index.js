@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { upload } = require('./cloudinary');
 const multer = require('multer');
+const localUpload = multer({ dest: '/tmp/' });
 const nodemailer = require('nodemailer');
 
 // ── Email transporter ──────────────────────────────────────────────────────
