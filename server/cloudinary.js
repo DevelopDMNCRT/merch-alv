@@ -9,38 +9,15 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// ── Storage para productos y variaciones ────────────────────────────────────
-const productStorage = new CloudinaryStorage({
+const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: 'Merch Alv/products',
+    folder: 'merch-alv/products',
     allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
     transformation: [{ quality: 'auto', fetch_format: 'auto' }],
   },
 });
 
-// ── Storage para tiendas (imágenes de portada y header) ─────────────────────
-const tiendaStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: 'Merch Alv/tiendas',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [{ quality: 'auto', fetch_format: 'auto' }],
-  },
-});
+const upload = multer({ storage });
 
-// ── Storage para noticias / news ─────────────────────────────────────────────
-const newsStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: 'Merch Alv/news',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [{ quality: 'auto', fetch_format: 'auto' }],
-  },
-});
-
-const upload        = multer({ storage: productStorage });
-const uploadTienda  = multer({ storage: tiendaStorage });
-const uploadNews    = multer({ storage: newsStorage });
-
-module.exports = { cloudinary, upload, uploadTienda, uploadNews };
+module.exports = { cloudinary, upload };

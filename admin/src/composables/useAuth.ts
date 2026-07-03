@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-const TOKEN_KEY = 'amigo_admin_token'
+const TOKEN_KEY = 'merch_alv_admin_token'
 
 const token = ref<string | null>(localStorage.getItem(TOKEN_KEY))
 const admin = ref<{ id: number; username: string; email: string } | null>(null)

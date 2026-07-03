@@ -14,15 +14,20 @@
         </div>
       </div>
 
-      <!-- Metric Cards -->
-      <div v-if="!loading" class="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] p-5 flex items-center gap-4">
-          <div class="h-12 w-12 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-600 dark:text-brand-400">
-            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      <!-- Total Piezas Card -->
+      <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] p-6 w-full max-w-sm">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-800 dark:text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
           </div>
           <div>
             <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Piezas Disponibles</p>
-            <h3 class="text-2xl font-bold text-gray-800 dark:text-white/90">{{ totalPiezasStock }}</h3>
+            <h3 class="text-2xl font-bold text-gray-800 dark:text-white/90">
+              <span v-if="loadingInventario">...</span>
+              <span v-else>{{ totalPiezas }}</span>
+            </h3>
           </div>
         </div>
       </div>
@@ -56,7 +61,7 @@
           </div>
         </div>
 
-        <!-- Table Section -->
+        <!-- Table Section Ventas -->
         <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
           <div class="px-6 py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-800">
             <h2 class="text-base font-semibold text-gray-800 dark:text-white/90">Listado de Ventas</h2>
@@ -95,7 +100,7 @@
                   <td colspan="2" class="px-6 py-4 font-bold text-gray-800 dark:text-white/90 text-left uppercase text-xs tracking-wider">
                     Grand Total
                   </td>
-                  <td class="px-6 py-4 font-bold text-brand-600 dark:text-brand-400 text-right text-lg">
+                  <td class="px-6 py-4 font-bold text-gray-800 dark:text-white/90 text-right text-base">
                     ${{ grandTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 }) }}
                   </td>
                 </tr>
@@ -104,56 +109,6 @@
           </div>
         </div>
 
-        <!-- Inventory Section -->
-        <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden mt-6">
-          <div class="px-6 py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-800">
-            <h2 class="text-base font-semibold text-gray-800 dark:text-white/90">Inventario Disponible</h2>
-            <div class="flex items-center gap-2 w-full sm:w-auto">
-              <input type="text" v-model="inventarioSearch" placeholder="Buscar producto..." class="w-full sm:w-64 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent py-2 pl-3 pr-3 text-sm text-gray-700 dark:text-gray-300 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-500/10">
-              <button @click="downloadPDF" class="flex items-center justify-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white shadow-theme-xs hover:bg-red-600 transition-colors" title="Descargar PDF">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9l2 2m0 0l2-2m-2 2v-5"/></svg>
-                PDF
-              </button>
-            </div>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="min-w-full text-left text-sm text-gray-500 dark:text-gray-400">
-              <thead class="bg-gray-50/50 dark:bg-gray-800/50 text-xs uppercase text-gray-700 dark:text-gray-300">
-                <tr>
-                  <th class="px-6 py-4 font-semibold">Producto</th>
-                  <th class="px-6 py-4 font-semibold">Variación (Talla/Color)</th>
-                  <th class="px-6 py-4 font-semibold text-right">Unidades</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                <template v-for="item in inventarioFiltrado" :key="item.id">
-                  <template v-if="item.variaciones && item.variaciones.length > 0">
-                    <tr v-for="v in item.variaciones" :key="v.id" class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                      <td class="px-6 py-4 text-gray-800 dark:text-white/90 font-medium">{{ item.producto_nombre }}</td>
-                      <td class="px-6 py-4">{{ v.valor }}</td>
-                      <td class="px-6 py-4 text-right">
-                        <span class="inline-flex rounded-full bg-blue-50 dark:bg-blue-500/10 px-2 py-0.5 text-xs text-blue-700 dark:text-blue-400 font-bold">{{ v.stock }}</span>
-                      </td>
-                    </tr>
-                  </template>
-                  <tr v-else class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <td class="px-6 py-4 text-gray-800 dark:text-white/90 font-medium">{{ item.producto_nombre }}</td>
-                    <td class="px-6 py-4 text-gray-400">N/A</td>
-                    <td class="px-6 py-4 text-right">
-                      <span class="inline-flex rounded-full bg-blue-50 dark:bg-blue-500/10 px-2 py-0.5 text-xs text-blue-700 dark:text-blue-400 font-bold">{{ item.producto_stock }}</span>
-                    </td>
-                  </tr>
-                </template>
-                <tr v-if="inventarioFiltrado.length === 0">
-                  <td colspan="3" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                    No se encontraron productos en el inventario.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
       </template>
 
     </div>
@@ -164,8 +119,6 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import AdminLayout from '@/components/layout/AdminLayout.vue';
 import VueApexCharts from 'vue3-apexcharts';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 // --- Estado ---
 const loading = ref(true);
@@ -175,8 +128,6 @@ const selectedMes = ref('todos');
 const rawRows = ref([]);
 const porMesData = ref({});
 
-const inventario = ref([]);
-const inventarioSearch = ref('');
 
 const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -205,65 +156,6 @@ const fetchData = async () => {
   finally { loading.value = false; }
 };
 
-const fetchInventario = async () => {
-  try {
-    const res = await fetch('/api/reportes/inventario');
-    if (res.ok) inventario.value = await res.json();
-  } catch (e) { console.error('Error fetching inventario:', e); }
-};
-
-// --- Inventario Logic ---
-const totalPiezasStock = computed(() => {
-  return inventario.value.reduce((total, p) => {
-    if (p.variaciones && p.variaciones.length > 0) {
-      return total + p.variaciones.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
-    }
-    return total + (Number(p.producto_stock) || 0);
-  }, 0);
-});
-
-const normalizeString = (str) => {
-  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-};
-
-const inventarioFiltrado = computed(() => {
-  if (!inventarioSearch.value) return inventario.value;
-  const term = normalizeString(inventarioSearch.value);
-  return inventario.value.filter(p => normalizeString(p.producto_nombre).includes(term));
-});
-
-const downloadPDF = () => {
-  const doc = new jsPDF();
-  
-  doc.setFontSize(18);
-  doc.text('Reporte de Inventario', 14, 20);
-  doc.setFontSize(11);
-  doc.text(`Total de piezas disponibles: ${totalPiezasStock.value}`, 14, 28);
-  
-  const tableData = [];
-  inventarioFiltrado.value.forEach(p => {
-    if (p.variaciones && p.variaciones.length > 0) {
-      p.variaciones.forEach(v => {
-        tableData.push([p.producto_nombre, v.valor || 'N/A', String(v.stock)]);
-      });
-    } else {
-      tableData.push([p.producto_nombre, 'N/A', String(p.producto_stock)]);
-    }
-  });
-
-  autoTable(doc, {
-    head: [['Producto', 'Variación (Talla/Color)', 'Unidades']],
-    body: tableData,
-    startY: 35,
-    theme: 'striped',
-    headStyles: { fillColor: [35, 118, 80] },
-    columnStyles: {
-      2: { halign: 'right' }
-    }
-  });
-
-  doc.save('inventario_merch.pdf');
-};
 
 // --- Filtrado de tabla por mes seleccionado ---
 const tableDataFiltrada = computed(() => {
@@ -274,6 +166,7 @@ const tableDataFiltrada = computed(() => {
 const grandTotal = computed(() =>
   tableDataFiltrada.value.reduce((acc, curr) => acc + curr.total, 0)
 );
+
 
 // --- Datos para gráficas (solo meses con ventas) ---
 const mesesConDatos = computed(() =>
@@ -339,6 +232,5 @@ const barOptions = computed(() => ({
 onMounted(async () => {
   await fetchTiendas();
   await fetchData();
-  await fetchInventario();
 });
 </script>

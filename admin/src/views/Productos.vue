@@ -5,11 +5,20 @@
       <!-- Page Header -->
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Productos</h1>
-        <router-link to="/productos/nuevo"
-          class="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-brand-600 transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Nuevo Producto
-        </router-link>
+        <div class="flex items-center gap-3">
+          <input type="file" ref="fileInput" @change="subirCSV" accept=".csv" class="hidden" />
+          <button @click="abrirUpload" :disabled="uploading"
+            class="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 transition-colors dark:border-gray-700 dark:bg-white/[0.03] dark:text-gray-300 dark:hover:bg-white/[0.05] disabled:opacity-50">
+            <svg v-if="uploading" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            {{ uploading ? 'Importando...' : 'Importar CSV' }}
+          </button>
+          <router-link to="/productos/nuevo"
+            class="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-brand-600 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nuevo Producto
+          </router-link>
+        </div>
       </div>
 
       <!-- Card -->
@@ -83,7 +92,13 @@
                 </td>
                 <!-- Precio -->
                 <td class="px-5 py-4 sm:px-6">
-                  <span v-if="p.precio" class="font-semibold text-gray-800 dark:text-white/90 text-theme-sm">${{ Number(p.precio).toFixed(2) }} MXN</span>
+                  <div v-if="p.precio" class="flex flex-col">
+                    <span v-if="p.descuento > 0" class="text-xs text-gray-400 line-through">${{ Number(p.precio).toFixed(2) }} MXN</span>
+                    <span class="font-semibold text-gray-800 dark:text-white/90 text-theme-sm" :class="{'!text-red-600': p.descuento > 0}">
+                      ${{ (Number(p.precio) * (1 - (p.descuento || 0)/100)).toFixed(2) }} MXN 
+                      <span v-if="p.descuento > 0" class="ml-1 text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 px-1 py-0.5 rounded border border-red-200 dark:border-red-800">-{{p.descuento}}%</span>
+                    </span>
+                  </div>
                   <span v-else class="text-xs text-gray-400 italic">Por variación</span>
                 </td>
                 <!-- Stock -->
@@ -162,6 +177,8 @@ const filtroActivo = ref('todos');
 const filtroTienda = ref('todas');
 const busqueda     = ref('');
 const loading      = ref(true);
+const uploading    = ref(false);
+const fileInput    = ref(null);
 const productos    = ref([]);
 const tiendasList  = ref([]);
 
@@ -174,7 +191,7 @@ const tabs = [
 const fetchProductos = async () => {
   loading.value = true;
   try {
-    const res = await axios.get('/api/products');
+    const res = await axios.get('/api/products?all=true');
     productos.value = res.data;
     
     const tiendasRes = await axios.get('/api/tiendas');
@@ -214,6 +231,33 @@ const eliminar = async (p) => {
   } catch (err) {
     console.error('Error deleting product:', err);
     alert('Error al eliminar el producto');
+  }
+};
+
+const abrirUpload = () => {
+  fileInput.value?.click();
+};
+
+const subirCSV = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  uploading.value = true;
+  try {
+    const res = await axios.post('/api/products/migrar-csv', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    alert(`Migración exitosa. Se insertaron ${res.data.count} filas.`);
+    fetchProductos(); // Recargar productos
+  } catch (err) {
+    console.error('Error al subir CSV:', err);
+    alert('Ocurrió un error al importar los productos.');
+  } finally {
+    uploading.value = false;
+    event.target.value = null; // reset
   }
 };
 </script>

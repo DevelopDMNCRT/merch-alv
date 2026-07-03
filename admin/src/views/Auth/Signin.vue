@@ -42,9 +42,9 @@
               type="text"
               id="username"
               autocomplete="username"
-              placeholder="admin@merchalv.com"
+              placeholder="admin@merchalv.mx"
               :disabled="loading"
-              class="w-full h-11 rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 transition focus:border-black focus:outline-none focus:ring-2 focus:ring-black/20 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500 dark:focus:border-white dark:focus:ring-white/20"
+              class="w-full h-11 rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500"
             />
           </div>
 
@@ -61,7 +61,7 @@
                 autocomplete="current-password"
                 placeholder="••••••••"
                 :disabled="loading"
-                class="w-full h-11 rounded-xl border border-gray-300 bg-white pl-4 pr-11 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 transition focus:border-black focus:outline-none focus:ring-2 focus:ring-black/20 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500 dark:focus:border-white dark:focus:ring-white/20"
+                class="w-full h-11 rounded-xl border border-gray-300 bg-white pl-4 pr-11 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500"
               />
               <button
                 type="button"
@@ -85,11 +85,11 @@
           <button
             type="submit"
             :disabled="loading || !username || !password"
-            class="relative w-full h-11 rounded-xl bg-black dark:bg-white text-sm font-semibold text-white dark:text-black shadow-sm transition hover:bg-zinc-800 dark:hover:bg-zinc-200 focus:outline-none focus:ring-2 focus:ring-black/40 dark:focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-60"
+            class="relative w-full h-11 rounded-xl bg-brand-500 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <span v-if="!loading">Iniciar sesión</span>
             <span v-else class="flex items-center justify-center gap-2">
-              <svg class="animate-spin h-4 w-4 text-white dark:text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
               </svg>
@@ -102,6 +102,44 @@
         <p class="mt-8 text-center text-xs text-gray-400 dark:text-gray-600">
           Acceso restringido · Merch ALV © 2026
         </p>
+      </div>
+    </div>
+
+    <!-- ── Right panel – brand visual ─────────────────────────────────────── -->
+    <div
+      class="hidden lg:flex flex-col items-center justify-center w-1/2 relative overflow-hidden"
+      style="background-color: #237650;"
+    >
+      <!-- Decorative circles -->
+      <div class="absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-10" style="background-color: #F6B200;"></div>
+      <div class="absolute -bottom-32 -left-32 w-[500px] h-[500px] rounded-full opacity-10" style="background-color: #F6B200;"></div>
+      <div class="absolute top-1/3 right-1/4 w-32 h-32 rounded-full opacity-5" style="background-color: #F6B200;"></div>
+
+      <!-- Content -->
+      <div class="relative z-10 flex flex-col items-center text-center px-12 max-w-md">
+        <img src="/logo-light-01.png" alt="Merch ALV" class="h-14 w-auto mb-10 brightness-0 invert" />
+        <h2 class="text-3xl font-extrabold text-white leading-tight mb-4">
+          Gestiona tu merch<br/>en un solo lugar.
+        </h2>
+        <p class="text-white/70 text-base leading-relaxed">
+          Administra tiendas, productos, pedidos y clientes de todos tus artistas desde este panel.
+        </p>
+
+        <!-- Stat pills -->
+        <div class="mt-10 flex gap-4">
+          <div class="rounded-2xl px-5 py-3 text-center" style="background: rgba(255,255,255,0.1);">
+            <p class="text-2xl font-bold text-white">18+</p>
+            <p class="text-xs text-white/60 mt-0.5">Artistas</p>
+          </div>
+          <div class="rounded-2xl px-5 py-3 text-center" style="background: rgba(255,255,255,0.1);">
+            <p class="text-2xl font-bold text-white">100%</p>
+            <p class="text-xs text-white/60 mt-0.5">Oficial</p>
+          </div>
+          <div class="rounded-2xl px-5 py-3 text-center" style="background: rgba(246,178,0,0.2);">
+            <p class="text-2xl font-bold" style="color: #F6B200;">MXN</p>
+            <p class="text-xs text-white/60 mt-0.5">Moneda base</p>
+          </div>
+        </div>
       </div>
     </div>
 

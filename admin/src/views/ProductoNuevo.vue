@@ -35,10 +35,12 @@
               <input v-model="form.nombre" type="text" placeholder="Ej. Playera Tour 2026"
                 class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
               <!-- Slug Preview -->
-              <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+              <div class="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 flex-wrap">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                Enlace: <span class="text-brand-600 dark:text-brand-400 font-mono">https://amigo-merch.vercel.app/producto/{{ slug }}</span>
-              </p>
+                Enlace: <span class="text-brand-600 dark:text-brand-400 font-mono">https://merch-alv.vercel.app/producto/</span>
+                <input v-model="form.slug" @input="slugEditado = true" type="text"
+                  class="flex-1 min-w-[150px] bg-transparent border-b border-dashed border-gray-300 dark:border-gray-600 text-brand-600 dark:text-brand-400 font-mono focus:border-brand-500 focus:outline-none p-0 h-5" />
+              </div>
             </div>
 
             <!-- Descripción -->
@@ -53,9 +55,9 @@
           <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] p-6">
             <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90 mb-5">Datos Generales</h2>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-5">
               <!-- Tienda -->
-              <div>
+              <div class="lg:col-span-2">
                 <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Tienda</label>
                 <select v-model="form.tienda"
                   class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20">
@@ -74,7 +76,6 @@
                   <input v-model="form.precio" type="number" step="0.01" placeholder="0.00" :disabled="form.esVariable"
                     class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent pl-8 pr-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 disabled:bg-gray-50 dark:disabled:bg-gray-800/50" />
                 </div>
-                <p v-if="form.esVariable" class="mt-1 text-xs text-amber-500 font-medium">Se define en las variaciones abajo</p>
               </div>
 
               <!-- Stock -->
@@ -82,7 +83,6 @@
                 <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Stock general</label>
                 <input v-model="form.stock" type="number" placeholder="0" :disabled="form.esVariable"
                   class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 disabled:bg-gray-50 dark:disabled:bg-gray-800/50" />
-                <p v-if="form.esVariable" class="mt-1 text-xs text-amber-500 font-medium">Se define en las variaciones abajo</p>
               </div>
 
               <!-- Envío Especial -->
@@ -98,8 +98,17 @@
               <!-- Peso -->
               <div>
                 <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Peso (kg)</label>
-                <input v-model="form.peso" type="number" step="0.01" placeholder="0.00"
-                  class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+                <input v-model="form.peso" type="number" step="0.001" placeholder="0.000" :disabled="form.esVariable"
+                  class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 disabled:bg-gray-50 dark:disabled:bg-gray-800/50" />
+              </div>
+              <!-- Descuento -->
+              <div>
+                <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Desc. (%)</label>
+                <div class="relative">
+                  <input v-model="form.descuento" type="number" min="0" max="100" placeholder="0"
+                    class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+                  <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                </div>
               </div>
             </div>
           </div>
@@ -182,6 +191,11 @@
                     <div class="w-full md:flex-1">
                       <label class="block text-xs text-gray-500 mb-1">Stock</label>
                       <input v-model="v.stock" type="number" placeholder="0" class="w-full h-10 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-brand-500 focus:outline-none" />
+                    </div>
+
+                    <div class="w-full md:flex-1">
+                      <label class="block text-xs text-gray-500 mb-1">Peso (kg)</label>
+                      <input v-model="v.peso" type="number" step="0.001" placeholder="0.000" class="w-full h-10 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm focus:border-brand-500 focus:outline-none" />
                     </div>
 
                     <div class="w-full md:w-auto">
@@ -281,7 +295,7 @@
               <div v-else class="flex flex-col items-center justify-center py-12 gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                 <p class="text-sm text-gray-500 font-medium">Sube una imagen</p>
-                <p class="text-xs text-gray-400">JPG, JPEG, PNG — máx. 1000×1000 px — máx. 800 KB</p>
+                <p class="text-xs text-gray-400">JPG, JPEG, PNG — máx. 1000×1000 px — máx. 5 MB</p>
               </div>
               <input ref="imgPrincipal" type="file" accept="image/jpeg,image/jpg,image/png" class="hidden" @change="onImgChange" />
               <div v-if="form.imagenPreview" class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
@@ -318,7 +332,7 @@
             </div>
             <input ref="imgGaleria" type="file" accept="image/jpeg,image/jpg,image/png" multiple class="hidden" @change="onGaleriaChange" />
             <p v-if="galeriaError" class="mt-2 text-xs text-error-500">{{ galeriaError }}</p>
-            <p class="mt-2 text-xs text-gray-400">JPG, JPEG, PNG — máx. 1000×1000 px — máx. 800 KB por imagen</p>
+            <p class="mt-2 text-xs text-gray-400">JPG, JPEG, PNG — máx. 1000×1000 px — máx. 5 MB por imagen</p>
           </div>
 
         </div>
@@ -353,6 +367,7 @@ const isEditing = computed(() => !!route.params.id);
 
 const form = reactive({
   nombre: '',
+  slug: '',
   descripcion: '',
   tienda: 'General',
   flag: '',
@@ -362,6 +377,7 @@ const form = reactive({
   stock: '',
   envioEspecial: '',
   peso: '',
+  descuento: 0,
   esVariable: false,
   esPublico: true,
   
@@ -391,12 +407,12 @@ watch(() => form.flag, (val) => {
   }
 });
 
-// Computed property for URL preview
-const slug = computed(() => {
-  if (form.nombre) {
-    return form.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+const slugEditado = ref(false);
+
+watch(() => form.nombre, (newVal) => {
+  if (!slugEditado.value) {
+    form.slug = newVal.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
   }
-  return '';
 });
 
 onMounted(async () => {
@@ -411,6 +427,8 @@ onMounted(async () => {
     try {
       const { data } = await axios.get(`/api/products/${route.params.id}`);
       form.nombre = data.nombre;
+      form.slug = data.slug || data.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+      slugEditado.value = true;
       form.descripcion = data.descripcion || '';
       form.tienda = data.tienda || 'General';
       form.flag = data.flag || '';
@@ -420,17 +438,43 @@ onMounted(async () => {
       form.stock = data.stock || '';
       form.envioEspecial = data.envio_especial || '';
       form.peso = data.peso || '';
+      form.descuento = data.descuento || 0;
       form.esVariable = data.es_variable;
       form.esPublico = data.es_publico;
-      if (data.atributos) form.atributos = data.atributos;
+      if (data.atributos) {
+        try {
+          let parsed = data.atributos;
+          while (typeof parsed === 'string') {
+            parsed = JSON.parse(parsed);
+          }
+          if (Array.isArray(parsed)) {
+            form.atributos = parsed;
+          }
+        } catch (e) {
+          console.warn('Error parsing atributos:', e);
+        }
+      }
       form.variaciones = data.variaciones.map(v => ({
         ...v,
+        peso: v.peso || '',
         color: v.color || '#000000',
         imagenPreview: v.imagen_url || null,  // Mostrar imagen existente
         imagen: null                           // null = sin nuevo archivo
       }));
       if (data.imagen_url) form.imagenPreview = data.imagen_url;
-      if (data.galeria_urls && data.galeria_urls.length > 0) form.galeriaPreview = data.galeria_urls;
+      if (data.galeria_urls) {
+        try {
+          let parsed = data.galeria_urls;
+          while (typeof parsed === 'string') {
+            parsed = JSON.parse(parsed);
+          }
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            form.galeriaPreview = parsed;
+          }
+        } catch (e) {
+          console.warn('Error parsing galeria_urls:', e);
+        }
+      }
     } catch (err) {
       console.error('Error fetching product:', err);
       alert('Error al cargar el producto para editar');
@@ -514,6 +558,7 @@ const generarVariaciones = () => {
       valor,
       precio: '',
       stock: '',
+      peso: '',
       color: colorObj ? colorObj.colorHex : '#000000',
       imagen: null,
       imagenPreview: null
@@ -526,6 +571,7 @@ const addVariacion = () => {
     valor: '',
     precio: '',
     stock: '',
+    peso: '',
     color: '#000000',
     imagen: null,
     imagenPreview: null
@@ -547,7 +593,7 @@ const clearVarImg = (index) => {
 
 // ── Imagen principal ─────────────────────────────────────────────────────────
 
-const IMG_CONSTRAINTS = { maxSize: 800 * 1024, maxWidth: 1000, maxHeight: 1000 };
+const IMG_CONSTRAINTS = { maxSize: 5 * 1024 * 1024, maxWidth: 1000, maxHeight: 1000 };
 
 const handleImagen = async (file) => {
   imagenError.value = '';
@@ -679,12 +725,17 @@ const guardar = async () => {
     fd.append('preventa_inicio', form.flag === 'Preventa' ? form.preventaInicio : '');
     fd.append('preventa_fin',    form.flag === 'Preventa' ? form.preventaFin    : '');
     fd.append('precio',          form.esVariable ? '' : (form.precio || ''));
-    fd.append('stock',          form.esVariable ? '0' : (form.stock || '0'));
-    fd.append('envio_especial', form.envioEspecial || '');
-    fd.append('peso',           form.peso || '');
-    fd.append('es_variable',    form.esVariable ? 'true' : 'false');
+    fd.append('stock',          form.esVariable ? '0' : form.stock);
+    fd.append('peso',           form.esVariable ? '0' : (form.peso || '0'));
+    if (form.envioEspecial !== '' && form.envioEspecial !== null && form.envioEspecial !== undefined) {
+      fd.append('envio_especial', form.envioEspecial);
+    } else {
+      fd.append('envio_especial', '');
+    }
+    fd.append('descuento', form.descuento || 0);
+    fd.append('es_variable', form.esVariable ? 'true' : 'false');
     fd.append('es_publico',     form.esPublico ? 'true' : 'false');
-    fd.append('slug',           slug.value);
+    fd.append('slug',           form.slug);
     fd.append('atributos',      JSON.stringify(form.atributos));
 
     if (form.esVariable && form.variaciones.length > 0) {
@@ -693,8 +744,9 @@ const guardar = async () => {
         valor:      v.valor,
         precio:     v.precio,
         stock:      v.stock,
+        peso:       v.peso,
         color:      v.color,
-        imagen_url: v.imagen instanceof File ? null : (v.imagen_url || null)
+        imagen_url: v.imagen instanceof File ? null : (v.imagenPreview && !v.imagenPreview.startsWith('blob:') ? v.imagenPreview : null)
       }));
       fd.append('variaciones', JSON.stringify(varsForJson));
       // Send each new variation image as a separate field
@@ -705,7 +757,13 @@ const guardar = async () => {
 
     if (form.imagen instanceof File) {
       fd.append('imagen', form.imagen);
+    } else if (!form.imagenPreview) {
+      fd.append('imagen_eliminada', 'true');
     }
+
+    const galeriaAntigua = form.galeriaPreview.filter(url => typeof url === 'string' && !url.startsWith('blob:'));
+    fd.append('galeria_existente', JSON.stringify(galeriaAntigua));
+
     form.galeria.forEach(file => {
       if (file instanceof File) fd.append('galeria', file);
     });

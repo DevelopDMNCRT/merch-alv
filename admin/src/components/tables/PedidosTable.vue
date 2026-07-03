@@ -10,6 +10,9 @@
               <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Cliente</p>
             </th>
             <th class="px-5 py-3 text-left sm:px-6">
+              <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Rastreo</p>
+            </th>
+            <th class="px-5 py-3 text-left sm:px-6">
               <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Fecha</p>
             </th>
             <th class="px-5 py-3 text-left sm:px-6">
@@ -42,6 +45,11 @@
               <span class="font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ pedido.cliente }}</span>
             </td>
 
+            <!-- Rastreo -->
+            <td class="px-5 py-4 sm:px-6">
+              <span class="font-mono text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 dark:text-gray-400 px-2 py-1 rounded-md">{{ pedido.codigo_rastreo }}</span>
+            </td>
+
             <!-- Fecha -->
             <td class="px-5 py-4 sm:px-6">
               <span class="text-gray-500 text-theme-sm dark:text-gray-400">{{ pedido.fecha }}</span>
@@ -68,7 +76,7 @@
           </tr>
 
           <tr v-if="pedidos.length === 0">
-            <td colspan="6" class="px-5 py-12 text-center">
+            <td colspan="7" class="px-5 py-12 text-center">
               <p class="text-sm text-gray-400 dark:text-gray-500">No hay pedidos registrados.</p>
             </td>
           </tr>
@@ -86,12 +94,13 @@ defineEmits(['select']);
 
 const estadoClase = (estado) => {
   const mapa = {
+    'Pendiente de pago': 'bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400',
     'Nuevo':       'bg-blue-light-50 text-blue-light-700 dark:bg-blue-light-500/15 dark:text-blue-light-400',
     'En proceso':  'bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400',
     'Completado':  'bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500',
     'Fallido':     'bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500',
     'Cancelado':   'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
   };
-  return mapa[estado] ?? mapa['Nuevo'];
+  return mapa[estado] ?? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
 };
 </script>

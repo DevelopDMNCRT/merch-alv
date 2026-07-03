@@ -15,23 +15,31 @@
   >
     <div
       :class="[
-        'py-8 hidden lg:flex',
-        'justify-center',
+        'py-8 flex',
+        !isExpanded && !isHovered ? 'lg:justify-center' : 'justify-start',
       ]"
     >
-      <router-link to="/" class="flex items-center justify-center">
-        <span
+      <router-link to="/">
+        <img
           v-if="isExpanded || isHovered || isMobileOpen"
-          class="text-2xl font-bold text-gray-900 dark:text-white text-center"
-        >
-          MerchALV
-        </span>
-        <span
+          class="dark:hidden"
+          src="/logo-light-01.png"
+          alt="Logo"
+          width="150"
+        />
+        <img
+          v-if="isExpanded || isHovered || isMobileOpen"
+          class="hidden dark:block"
+          src="/logo-dark-01.png"
+          alt="Logo"
+          width="150"
+        />
+        <img
           v-else
-          class="text-2xl font-bold text-gray-900 dark:text-white text-center"
-        >
-          M
-        </span>
+          src="/favicon.svg"
+          alt="Logo"
+          width="32"
+        />
       </router-link>
     </div>
     <div
@@ -268,7 +276,12 @@ const menuGroups = [
         path: "/reporte",
       },
       {
-        icon: BoxIcon,
+        icon: BoxIcon, // Using BoxIcon for now, you might want to choose a different one
+        name: "Inventario",
+        path: "/inventario",
+      },
+      {
+        icon: BoxIcon, // You can change the icon later
         name: "Envío",
         path: "/envio",
       },

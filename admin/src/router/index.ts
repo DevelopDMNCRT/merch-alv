@@ -79,6 +79,22 @@ const router = createRouter({
       },
     },
     {
+      path: '/inventario',
+      name: 'Inventario',
+      component: () => import('../views/Inventario.vue'),
+      meta: {
+        title: 'Inventario',
+      },
+    },
+    {
+      path: '/envio',
+      name: 'Envio',
+      component: () => import('../views/Envio.vue'),
+      meta: {
+        title: 'Configuración de Envío',
+      },
+    },
+    {
       path: '/news',
       name: 'News',
       component: () => import('../views/News.vue'),
@@ -158,14 +174,6 @@ const router = createRouter({
         title: '404 Error',
       },
     },
-    {
-      path: '/envio',
-      name: 'Envio',
-      component: () => import('../views/Envio.vue'),
-      meta: {
-        title: 'Envío',
-      },
-    },
   ],
 })
 
@@ -174,15 +182,7 @@ export default router
 const PUBLIC_ROUTES = ['/signin', '/signup', '/error-404']
 
 router.beforeEach((to, _from, next) => {
-  document.title = `${to.meta.title} | Amigo Merch Admin`
-  // const token = localStorage.getItem('amigo_admin_token')
-  // const isPublic = PUBLIC_ROUTES.includes(to.path as string) // Added "as string" just in case, but let's see original
-  // if (!token && !isPublic) {
-  //   next('/signin')
-  // } else if (token && to.path === '/signin') {
-  //   next('/')
-  // } else {
-  //   next()
-  // }
+  document.title = `${to.meta.title} | Merch ALV Admin`
+  // Login guard disabled
   next()
 })
