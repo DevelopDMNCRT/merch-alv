@@ -7,81 +7,1728 @@ const jwt = require('jsonwebtoken');
 const { upload } = require('./cloudinary');
 const multer = require('multer');
 const nodemailer = require('nodemailer');
-const fs = require('fs');
-const csv = require('csv-parser');
 
-const localUpload = multer({ dest: '/tmp/' });
-// --- PayPal Configuration & Helpers ---
-const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID;
-const PAYPAL_SECRET = process.env.PAYPAL_SECRET;
-const PAYPAL_MODE = process.env.PAYPAL_MODE || 'sandbox';
-const PAYPAL_API = PAYPAL_MODE === 'production' 
-  ? 'https://api-m.paypal.com' 
-  : 'https://api-m.sandbox.paypal.com';
+// ── Email transporter ──────────────────────────────────────────────────────
+const mailer = nodemailer.createTransport({
+  host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
+  port:   parseInt(process.env.SMTP_PORT || '587'),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+  },
+});
 
-async function getPayPalAccessToken() {
-  if (!PAYPAL_CLIENT_ID || !PAYPAL_SECRET) {
-    throw new Error('PayPal credentials are not configured in environment variables');
+// Estados que disparan correo al cliente y la plantilla correspondiente
+const EMAIL_TRIGGERS = {
+  'En proceso': (p) => ({
+    subject: `¡Estamos procesando tu pedido #${p.orden}! — Amigo Merch`,
+    html: `
+      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
+        <div style="text-align:center;margin-bottom:24px">
+          <h1 style="color:#237650;font-size:24px;margin:0">¡Estamos procesando tu pedido! ⚙️</h1>
+        </div>
+        <p>Hola <strong>${p.nombre}</strong>,</p>
+        <p>Hemos confirmado tu pago y <strong>ya estamos preparando tu pedido #${p.orden}</strong> con todo el cariño para que llegue perfecto a tus manos.</p>
+        <p>Te avisaremos en cuanto lo enviemos. Puedes consultar el estado de tu pedido en cualquier momento aquí:</p>
+        <div style="text-align:center;margin:24px 0">
+          <a href="https://amigo-merch.vercel.app/rastreo" style="background:#237650;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Rastrear mi pedido</a>
+        </div>
+        <p style="color:#666;font-size:13px">Número de pedido: <strong>#${p.orden}</strong></p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+        <p style="color:#aaa;font-size:12px;text-align:center">Amigo Merch · <a href="mailto:amigomerchmx@gmail.com" style="color:#aaa">amigomerchmx@gmail.com</a></p>
+      </div>
+    `
+  }),
+  'Guía Generada': (p) => ({
+    subject: `¡Tu pedido #${p.orden} va en camino! — Amigo Merch`,
+    html: `
+      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
+        <div style="text-align:center;margin-bottom:24px">
+          <h1 style="color:#237650;font-size:24px;margin:0">¡Tu pedido va en camino! 🚚</h1>
+        </div>
+        <p>Hola <strong>${p.nombre}</strong>,</p>
+        <p>¡Buenas noticias! Tu pedido <strong>#${p.orden}</strong> ha sido enviado y está en camino a tu domicilio.</p>
+        ${p.paqueteria ? `
+        <div style="background:#f5f9f7;border-left:4px solid #237650;padding:16px;border-radius:4px;margin:20px 0">
+          <p style="margin:0 0 6px 0;font-weight:bold;color:#237650">Información de envío</p>
+          <p style="margin:0;font-size:14px">📦 Paquetería: <strong>${p.paqueteria}</strong></p>
+          ${p.num_rastreo ? `<p style="margin:4px 0 0 0;font-size:14px">🔍 Número de rastreo: <strong>${p.num_rastreo}</strong></p>` : ''}
+        </div>` : ''}
+        <p>Si tienes alguna duda sobre tu envío, no dudes en contactarnos:</p>
+        <div style="text-align:center;margin:24px 0">
+          <a href="https://amigo-merch.vercel.app/contacto" style="background:#237650;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Contactar a soporte</a>
+        </div>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+        <p style="color:#aaa;font-size:12px;text-align:center">Amigo Merch · <a href="mailto:amigomerchmx@gmail.com" style="color:#aaa">amigomerchmx@gmail.com</a></p>
+      </div>
+    `
+  }),
+  'Cancelado': (p) => ({
+    subject: `Tu pedido #${p.orden} ha sido cancelado — Amigo Merch`,
+    html: `
+      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
+        <div style="text-align:center;margin-bottom:24px">
+          <h1 style="color:#c62828;font-size:24px;margin:0">Pedido cancelado</h1>
+        </div>
+        <p>Hola <strong>${p.nombre}</strong>,</p>
+        <p>Lamentamos informarte que tu pedido <strong>#${p.orden}</strong> ha sido cancelado.</p>
+        <p>Si crees que esto es un error o necesitas ayuda, nuestro equipo está listo para atenderte. Puedes contactarnos directamente desde nuestra página:</p>
+        <div style="text-align:center;margin:24px 0">
+          <a href="https://amigo-merch.vercel.app/contacto" style="background:#c62828;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Ir a la sección de contacto</a>
+        </div>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+        <p style="color:#aaa;font-size:12px;text-align:center">Amigo Merch · <a href="mailto:amigomerchmx@gmail.com" style="color:#aaa">amigomerchmx@gmail.com</a></p>
+      </div>
+    `
+  }),
+  'Fallido': (p) => ({
+    subject: `Tuvimos un problema con tu pedido #${p.orden} — Amigo Merch`,
+    html: `
+      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
+        <div style="text-align:center;margin-bottom:24px">
+          <h1 style="color:#c62828;font-size:24px;margin:0">Hubo un problema con tu pago 😔</h1>
+        </div>
+        <p>Hola <strong>${p.nombre}</strong>,</p>
+        <p>Lamentamos informarte que no pudimos procesar el pago de tu pedido <strong>#${p.orden}</strong>.</p>
+        <p>Esto puede ocurrir por distintas razones: fondos insuficientes, datos incorrectos o una restricción de tu banco. ¡Pero no te preocupes, puedes intentarlo nuevamente!</p>
+        <div style="text-align:center;margin:24px 0">
+          <a href="https://amigo-merch.vercel.app" style="background:#237650;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Intentar de nuevo</a>
+        </div>
+        <p style="color:#666;font-size:13px">Si el problema persiste, contáctanos y con gusto te ayudamos.</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+        <p style="color:#aaa;font-size:12px;text-align:center">Amigo Merch · <a href="mailto:amigomerchmx@gmail.com" style="color:#aaa">amigomerchmx@gmail.com</a></p>
+      </div>
+    `
+  }),
+};
+
+// Correo de confirmación al crear el pedido
+async function sendOrderConfirmationEmail(pedido) {
+  if (!process.env.SMTP_USER) {
+    console.log(`[EMAIL SKIPPED] No SMTP_USER configured. Would send order confirmation to ${pedido.correo}`);
+    return;
   }
-  const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_SECRET}`).toString('base64');
-  const res = await fetch(`${PAYPAL_API}/v1/oauth2/token`, {
-    method: 'POST',
-    body: 'grant_type=client_credentials',
-    headers: {
-      'Authorization': `Basic ${auth}`,
-      'Content-Type': 'application/x-www-form-urlencoded'
-    }
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to get PayPal token: ${text}`);
+  const items = typeof pedido.items === 'string' ? JSON.parse(pedido.items) : (pedido.items || []);
+  const itemsHtml = items.map(i =>
+    `<tr>
+      <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px;color:#333">${i.nombre || i.name || 'Producto'}${i.variante ? ` <span style="color:#888">(${i.variante})</span>` : ''}</td>
+      <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px;color:#333;text-align:center">${i.cantidad || 1}</td>
+      <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px;color:#333;text-align:right">$${parseFloat(i.precio || 0).toFixed(2)}</td>
+    </tr>`
+  ).join('');
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
+      <div style="text-align:center;margin-bottom:24px">
+        <h1 style="color:#237650;font-size:26px;margin:0">¡Gracias por tu pedido! 🎉</h1>
+      </div>
+      <p>Hola <strong>${pedido.nombre}</strong>,</p>
+      <p>Hemos recibido tu pedido correctamente. En breve recibirás una confirmación de pago y comenzaremos a prepararlo.</p>
+
+      <div style="background:#f5f9f7;border-radius:8px;padding:20px;margin:20px 0">
+        <p style="margin:0 0 12px 0;font-weight:bold;color:#237650">Resumen de tu pedido <span style="color:#333">#${pedido.orden}</span></p>
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left;font-size:12px;color:#888;padding-bottom:8px;border-bottom:2px solid #eee">Producto</th>
+              <th style="text-align:center;font-size:12px;color:#888;padding-bottom:8px;border-bottom:2px solid #eee">Cant.</th>
+              <th style="text-align:right;font-size:12px;color:#888;padding-bottom:8px;border-bottom:2px solid #eee">Precio</th>
+            </tr>
+          </thead>
+          <tbody>${itemsHtml}</tbody>
+        </table>
+        <div style="margin-top:12px;text-align:right">
+          <p style="margin:4px 0;font-size:13px;color:#666">Envío: <strong>$${parseFloat(pedido.envio || 0).toFixed(2)}</strong></p>
+          <p style="margin:4px 0;font-size:16px;font-weight:bold;color:#237650">Total: $${parseFloat(pedido.total || 0).toFixed(2)}</p>
+        </div>
+      </div>
+
+      <p style="color:#666;font-size:13px">📍 Dirección de entrega: <strong>${pedido.domicilio || [pedido.calle, pedido.num_ext, pedido.colonia, pedido.ciudad].filter(Boolean).join(', ')}</strong></p>
+
+      <p>Puedes rastrear el estado de tu pedido en cualquier momento:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="https://amigo-merch.vercel.app/rastreo" style="background:#237650;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Rastrear mi pedido</a>
+      </div>
+      <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+      <p style="color:#aaa;font-size:12px;text-align:center">Amigo Merch · <a href="mailto:amigomerchmx@gmail.com" style="color:#aaa">amigomerchmx@gmail.com</a></p>
+    </div>
+  `;
+  try {
+    await mailer.sendMail({
+      from: `"Amigo Merch" <${process.env.SMTP_USER}>`,
+      replyTo: 'amigomerchmx@gmail.com',
+      to: pedido.correo,
+      subject: `¡Gracias por tu pedido #${pedido.orden}! — Amigo Merch`,
+      html,
+    });
+    console.log(`[EMAIL SENT] Confirmación de pedido → ${pedido.correo}`);
+  } catch (err) {
+    console.error(`[EMAIL ERROR] Could not send order confirmation:`, err.message);
   }
-  const data = await res.json();
-  return data.access_token;
 }
 
-async function createPayPalOrder(amountVal) {
-  const token = await getPayPalAccessToken();
-  const res = await fetch(`${PAYPAL_API}/v2/checkout/orders`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation'
-    },
-    body: JSON.stringify({
-      intent: 'CAPTURE',
-      purchase_units: [{
-        amount: {
-          currency_code: 'MXN',
-          value: amountVal.toFixed(2)
+async function sendStatusEmail(pedido, estado) {
+  const trigger = EMAIL_TRIGGERS[estado];
+  if (!trigger) return;                          // Estado sin correo
+  if (!process.env.SMTP_USER) {
+    console.log(`[EMAIL SKIPPED] No SMTP_USER configured. Would send "${estado}" email to ${pedido.correo}`);
+    return;
+  }
+  const { subject, html } = trigger(pedido);
+  try {
+    await mailer.sendMail({
+      from: `"Amigo Merch" <${process.env.SMTP_USER}>`,
+      replyTo: 'amigomerchmx@gmail.com',
+      to:   pedido.correo,
+      subject,
+      html,
+    });
+    console.log(`[EMAIL SENT] Estado "${estado}" → ${pedido.correo}`);
+  } catch (err) {
+    console.error(`[EMAIL ERROR] Could not send status email:`, err.message);
+  }
+}
+
+const app = express();
+const port = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
+
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Database Connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+// --- Auth Routes ---
+
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
+  try {
+    const result = await pool.query(
+      'SELECT * FROM users WHERE correo = $1 OR nombre = $1',
+      [username]
+    );
+    if (result.rows.length === 0) return res.status(401).json({ error: 'Credenciales incorrectas' });
+    const user = result.rows[0];
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
+    const token = jwt.sign(
+      { id: user.id, username: user.nombre, email: user.correo, rol: user.rol },
+      JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+    res.json({ token, admin: { id: user.id, username: user.nombre, email: user.correo, rol: user.rol } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'No autorizado' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const result = await pool.query('SELECT id, nombre, correo, rol FROM users WHERE id = $1', [decoded.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const u = result.rows[0];
+    res.json({ admin: { id: u.id, username: u.nombre, email: u.correo, rol: u.rol } });
+  } catch {
+    res.status(401).json({ error: 'Token inválido o expirado' });
+  }
+});
+
+// --- Users CRUD ---
+
+app.get('/api/users', async (_req, res) => {
+  try {
+    const result = await pool.query('SELECT id, nombre, correo, rol, created_at FROM users ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch users' }); }
+});
+
+app.get('/api/users/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('SELECT id, nombre, correo, rol, created_at FROM users WHERE id = $1', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch user' }); }
+});
+
+app.post('/api/users', async (req, res) => {
+  const { nombre, correo, rol, password } = req.body;
+  if (!nombre || !correo || !rol || !password) return res.status(400).json({ error: 'All fields are required' });
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      'INSERT INTO users (nombre, correo, rol, password) VALUES ($1, $2, $3, $4) RETURNING id, nombre, correo, rol',
+      [nombre, correo, rol, hashedPassword]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Email already exists' });
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  const { id } = req.params;
+  const { nombre, correo, rol, password } = req.body;
+  try {
+    let query, params;
+    if (password && password.length > 0) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      query = 'UPDATE users SET nombre=$1, correo=$2, rol=$3, password=$4 WHERE id=$5 RETURNING id, nombre, correo, rol';
+      params = [nombre, correo, rol, hashedPassword, id];
+    } else {
+      query = 'UPDATE users SET nombre=$1, correo=$2, rol=$3 WHERE id=$4 RETURNING id, nombre, correo, rol';
+      params = [nombre, correo, rol, id];
+    }
+    const result = await pool.query(query, params);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Email already exists' });
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    res.json({ message: 'User deleted' });
+  } catch (err) { res.status(500).json({ error: 'Failed to delete user' }); }
+});
+
+// --- Products CRUD ---
+
+// GET all products
+app.get('/api/products', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  try {
+    const { all } = req.query;
+    let query = `
+      SELECT p.*,
+        (SELECT MIN(pv.precio) FROM product_variations pv WHERE pv.product_id = p.id) AS min_v_price,
+        (SELECT COUNT(*) FROM product_variations pv WHERE pv.product_id = p.id) AS variaciones_count
+      FROM products p
+      WHERE p.deleted_at IS NULL
+    `;
+    
+    if (all !== 'true') {
+      query += ` AND p.es_publico = true`;
+    }
+    
+    query += ` ORDER BY p.created_at DESC`;
+
+    const result = await pool.query(query);
+    
+    // Fallback: If main price is null or 0 (common in variable products), use the min variation price
+    const products = result.rows.map(p => ({
+      ...p,
+      precio: (p.precio && parseFloat(p.precio) > 0) ? p.precio : p.min_v_price
+    }));
+    
+    res.json(products);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+// GET single product with variations
+app.get('/api/products/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const product = await pool.query('SELECT * FROM products WHERE (id::text = $1 OR slug = $1) AND deleted_at IS NULL', [id]);
+    if (product.rows.length === 0) return res.status(404).json({ error: 'Product not found' });
+    
+    const realProductId = product.rows[0].id;
+    const variations = await pool.query('SELECT * FROM product_variations WHERE product_id = $1 ORDER BY id', [realProductId]);
+    res.json({ ...product.rows[0], variaciones: variations.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch product' });
+  }
+});
+
+// POST create product
+app.post('/api/products', upload.any(), async (req, res) => {
+  const { nombre, descripcion, precio, stock, envio_especial, es_variable, es_publico, slug, atributos, variaciones, tienda, flag, preventa_inicio, preventa_fin, peso, descuento } = req.body;
+
+  if (!nombre) return res.status(400).json({ error: 'El nombre es requerido' });
+
+  const files = req.files || [];
+  const imagen_url   = files.find(f => f.fieldname === 'imagen')?.path || null;
+  const galeria_urls = files.filter(f => f.fieldname === 'galeria').map(f => f.path);
+  const varImgMap    = {};
+  files.filter(f => f.fieldname.startsWith('varImg_')).forEach(f => {
+    const idx = parseInt(f.fieldname.replace('varImg_', ''));
+    varImgMap[idx] = f.path;
+  });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const productSlug = slug || nombre
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-');
+
+    const result = await client.query(
+      `INSERT INTO products (nombre, descripcion, precio, stock, envio_especial, es_variable, es_publico, slug, imagen_url, galeria_urls, atributos, tienda, flag, preventa_inicio, preventa_fin, peso, descuento)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+      [
+        nombre, descripcion || null,
+        precio ? parseFloat(precio) : null,
+        stock ? parseInt(stock) : 0,
+        envio_especial ? parseFloat(envio_especial) : null,
+        es_variable === 'true', es_publico !== 'false',
+        productSlug, imagen_url, JSON.stringify(galeria_urls),
+        atributos || null, tienda || 'General', flag || null,
+        (flag === 'Preventa' && preventa_inicio) ? preventa_inicio : null,
+        (flag === 'Preventa' && preventa_fin)    ? preventa_fin    : null,
+        peso ? parseFloat(peso) : 0,
+        descuento ? parseInt(descuento) : 0
+      ]
+    );
+
+    const product = result.rows[0];
+
+    if (es_variable === 'true' && variaciones) {
+      const vars = JSON.parse(variaciones);
+      for (let i = 0; i < vars.length; i++) {
+        const v = vars[i];
+        // Use newly uploaded Cloudinary URL, or existing URL (not blobs)
+        const varImg = varImgMap[i] || (v.imagen_url && !v.imagen_url.startsWith('blob:') ? v.imagen_url : null);
+        await client.query(
+          `INSERT INTO product_variations (product_id, valor, precio, stock, color, imagen_url, peso)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [product.id, v.valor, v.precio ? parseFloat(v.precio) : null, v.stock ? parseInt(v.stock) : 0, v.color || null, varImg, v.peso ? parseFloat(v.peso) : 0]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json(product);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create product', details: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT update product
+app.put('/api/products/:id', upload.any(), async (req, res) => {
+  const { id } = req.params;
+  const { nombre, descripcion, precio, stock, envio_especial, es_variable, es_publico, slug, atributos, variaciones, tienda, flag, preventa_inicio, preventa_fin, peso, descuento } = req.body;
+
+  if (!nombre) return res.status(400).json({ error: 'El nombre es requerido' });
+
+  const files = req.files || [];
+  const varImgMap = {};
+  files.filter(f => f.fieldname.startsWith('varImg_')).forEach(f => {
+    const idx = parseInt(f.fieldname.replace('varImg_', ''));
+    varImgMap[idx] = f.path;
+  });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const productSlug = slug || nombre
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-');
+
+    const existing = await client.query('SELECT imagen_url, galeria_urls FROM products WHERE id = $1', [id]);
+    if (existing.rows.length === 0) throw new Error('Product not found');
+
+    let imagen_url = existing.rows[0].imagen_url;
+    if (req.body.imagen_eliminada === 'true') {
+      imagen_url = null;
+    }
+    const newMainImg = files.find(f => f.fieldname === 'imagen');
+    if (newMainImg) imagen_url = newMainImg.path;
+
+    let galeria_urls = req.body.galeria_existente ? JSON.parse(req.body.galeria_existente) : existing.rows[0].galeria_urls || [];
+    const newGaleria = files.filter(f => f.fieldname === 'galeria');
+    if (newGaleria.length) galeria_urls = [...galeria_urls, ...newGaleria.map(f => f.path)];
+
+    const result = await client.query(
+      `UPDATE products SET nombre=$1, descripcion=$2, precio=$3, stock=$4, envio_especial=$5, es_variable=$6, es_publico=$7, slug=$8, imagen_url=$9, galeria_urls=$10, atributos=$11, tienda=$13, flag=$14, preventa_inicio=$15, preventa_fin=$16, peso=$17, descuento=$18
+       WHERE id=$12 RETURNING *`,
+      [
+        nombre, descripcion || null,
+        precio ? parseFloat(precio) : null,
+        stock ? parseInt(stock) : 0,
+        envio_especial ? parseFloat(envio_especial) : null,
+        es_variable === 'true', es_publico !== 'false',
+        productSlug, imagen_url, JSON.stringify(galeria_urls),
+        atributos || null, id, tienda || 'General', flag || null,
+        (flag === 'Preventa' && preventa_inicio) ? preventa_inicio : null,
+        (flag === 'Preventa' && preventa_fin)    ? preventa_fin    : null,
+        peso ? parseFloat(peso) : 0,
+        descuento ? parseInt(descuento) : 0
+      ]
+    );
+
+    const product = result.rows[0];
+
+    await client.query('DELETE FROM product_variations WHERE product_id = $1', [id]);
+    if (es_variable === 'true' && variaciones) {
+      const vars = JSON.parse(variaciones);
+      for (let i = 0; i < vars.length; i++) {
+        const v = vars[i];
+        const varImg = varImgMap[i] || (v.imagen_url && !v.imagen_url.startsWith('blob:') ? v.imagen_url : null);
+        await client.query(
+          `INSERT INTO product_variations (product_id, valor, precio, stock, color, imagen_url, peso)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [product.id, v.valor, v.precio ? parseFloat(v.precio) : null, v.stock ? parseInt(v.stock) : 0, v.color || null, varImg, v.peso ? parseFloat(v.peso) : 0]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json(product);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update product', details: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE product (Soft Delete)
+app.delete('/api/products/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('UPDATE products SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1', [id]);
+    res.json({ message: 'Product deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete product' });
+  }
+});
+// Import CSV products
+app.post('/api/products/migrar-csv', localUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const results = [];
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => results.push(data))
+    .on('end', async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        
+        const baseProducts = results.filter(r => r.Type === 'simple' || r.Type === 'variable');
+        const variations = results.filter(r => r.Type === 'variation');
+
+        const insertedProductsMap = {};
+
+        for (const row of baseProducts) {
+          const nombre = row.Name || 'Sin Nombre';
+          const descripcion = row['Short description'] || row.Description || null;
+          const precio = row['Regular price'] || row['Sale price'] || 0;
+          const stock = parseInt(row.Stock) || 0;
+          const peso = parseFloat(row['Weight (kg)']) || 0;
+          const es_publico = row.Published === '1';
+          const es_variable = row.Type === 'variable';
+          const tienda = row.Categories || 'General';
+          
+          let imagen_url = null;
+          let galeria_urls = [];
+          if (row.Images) {
+            const urls = row.Images.split(',').map(s => s.trim()).filter(s => s);
+            if (urls.length > 0) {
+              imagen_url = urls[0];
+              galeria_urls = urls.slice(1);
+            }
+          }
+
+          let atributos = null;
+          if (es_variable && row['Attribute 1 name'] && row['Attribute 1 value(s)']) {
+            atributos = JSON.stringify([{
+              nombre: row['Attribute 1 name'],
+              opciones: row['Attribute 1 value(s)'].split(',').map(s => s.trim())
+            }]);
+          }
+
+          const productSlug = nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+
+          const query = `
+            INSERT INTO products (nombre, descripcion, precio, stock, es_variable, es_publico, slug, imagen_url, galeria_urls, atributos, tienda, peso)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT (slug) DO UPDATE SET
+              nombre = EXCLUDED.nombre,
+              descripcion = EXCLUDED.descripcion,
+              precio = EXCLUDED.precio,
+              stock = EXCLUDED.stock,
+              es_variable = EXCLUDED.es_variable,
+              es_publico = EXCLUDED.es_publico,
+              imagen_url = EXCLUDED.imagen_url,
+              galeria_urls = EXCLUDED.galeria_urls,
+              atributos = EXCLUDED.atributos,
+              tienda = EXCLUDED.tienda,
+              peso = EXCLUDED.peso,
+              deleted_at = NULL
+            RETURNING id`;
+          const values = [nombre, descripcion, parseFloat(precio) || 0, stock, es_variable, es_publico, productSlug, imagen_url, JSON.stringify(galeria_urls), atributos, tienda, peso];
+          
+          const result = await client.query(query, values);
+          insertedProductsMap[nombre.trim()] = result.rows[0].id;
         }
-      }]
-    })
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to create PayPal order: ${text}`);
+
+        for (const row of variations) {
+          const varName = row.Name || '';
+          let baseName = null;
+          let baseId = null;
+          
+          for (const name of Object.keys(insertedProductsMap)) {
+            if (varName.startsWith(name)) {
+              baseName = name;
+              baseId = insertedProductsMap[name];
+              break;
+            }
+          }
+
+          if (baseId) {
+            const valor = row['Attribute 1 value(s)'] || varName.replace(`${baseName} - `, '').trim();
+            const precio = row['Regular price'] || row['Sale price'] || null;
+            const stock = parseInt(row.Stock) || 0;
+            const peso = parseFloat(row['Weight (kg)']) || 0;
+            
+            await client.query(
+              `INSERT INTO product_variations (product_id, valor, precio, stock, peso) VALUES ($1, $2, $3, $4, $5)`,
+              [baseId, valor, precio ? parseFloat(precio) : null, stock, peso]
+            );
+          }
+        }
+
+        await client.query('COMMIT');
+        try { fs.unlinkSync(req.file.path); } catch(e){} 
+        res.json({ message: 'Migración completada', count: baseProducts.length + variations.length });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        try { fs.unlinkSync(req.file.path); } catch(e){}
+        console.error('Error migrando CSV:', error);
+        res.status(500).json({ error: 'Error procesando CSV', details: error.message });
+      } finally {
+        client.release();
+      }
+    });
+});
+
+// Upload image only
+app.post('/api/upload', upload.single('imagen'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  res.json({ url: req.file.path, public_id: req.file.filename });
+});
+
+// Contact route
+app.post('/api/contact', async (req, res) => {
+  const { name, email, subject, message } = req.body;
+  if (!name || !email || !message) {
+    return res.status(400).json({ error: 'Nombre, correo y mensaje son requeridos' });
   }
-  return await res.json();
+  const subjectMap = {
+    pedido: 'Duda sobre mi pedido',
+    maquila: 'Cotización de Maquila',
+    otro: 'Otro'
+  };
+  const displaySubject = subjectMap[subject] || subject || 'Sin asunto';
+
+  try {
+    await mailer.sendMail({
+      from: `"Contacto Amigo Merch" <${process.env.SMTP_USER}>`,
+      to: 'amigomerchmx@gmail.com',
+      replyTo: email,
+      subject: displaySubject,
+      html: `
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
+          <div style="display: flex; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #237650; padding-bottom: 15px;">
+            <img src="https://www.amigomerch.mx/logo.png" alt="Amigo Merch" style="height: 40px; margin-right: 15px;">
+            <h2 style="color:#237650; margin: 0;">Amigo Merch | Soporte</h2>
+          </div>
+          <p><strong>Nombre:</strong> ${name}</p>
+          <p><strong>Correo:</strong> ${email}</p>
+          <p><strong>Asunto:</strong> ${displaySubject}</p>
+          <p><strong>Mensaje:</strong></p>
+          <p style="white-space: pre-wrap; background:#f9f9f9; padding: 15px; border-radius: 8px;">${message}</p>
+        </div>
+      `,
+    });
+    res.json({ success: true, message: 'Mensaje enviado correctamente' });
+  } catch (err) {
+    console.error('[CONTACT EMAIL ERROR]', err);
+    res.status(500).json({ error: 'Error enviando el mensaje' });
+  }
+});
+
+// Basic routes
+app.get('/', (_req, res) => res.json({ message: 'Amigo Merch API is running' }));
+
+
+
+// --- Tiendas CRUD ---
+
+// GET all tiendas
+app.get('/api/tiendas', async (_req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM tiendas WHERE deleted_at IS NULL ORDER BY nombre ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch tiendas' });
+  }
+});
+
+// GET single tienda
+app.get('/api/tiendas/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('SELECT * FROM tiendas WHERE id = $1 AND deleted_at IS NULL', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Tienda no encontrada' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch tienda' });
+  }
+});
+
+// POST create tienda
+app.post('/api/tiendas', upload.fields([{ name: 'imagen', maxCount: 1 }, { name: 'header', maxCount: 1 }]), async (req, res) => {
+  try {
+    const { nombre, publico } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'El nombre es requerido' });
+    const imagen_url = req.files?.imagen?.[0]?.path || null;
+    const header_url = req.files?.header?.[0]?.path || null;
+    const result = await pool.query(
+      'INSERT INTO tiendas (nombre, publico, imagen_url, header_url) VALUES ($1, $2, $3, $4) RETURNING *',
+      [nombre, publico === 'true', imagen_url, header_url]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create tienda', details: err.message });
+  }
+});
+
+// PUT update tienda
+app.put('/api/tiendas/:id', upload.fields([{ name: 'imagen', maxCount: 1 }, { name: 'header', maxCount: 1 }]), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, publico } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'El nombre es requerido' });
+
+    const existing = await pool.query('SELECT imagen_url, header_url FROM tiendas WHERE id = $1 AND deleted_at IS NULL', [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Tienda no encontrada' });
+
+    const imagen_url = req.files?.imagen?.[0]?.path ?? existing.rows[0].imagen_url;
+    const header_url = req.files?.header?.[0]?.path ?? existing.rows[0].header_url;
+
+    const result = await pool.query(
+      'UPDATE tiendas SET nombre = $1, publico = $2, imagen_url = $3, header_url = $4 WHERE id = $5 RETURNING *',
+      [nombre, publico === 'true', imagen_url, header_url, id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update tienda', details: err.message });
+  }
+});
+
+// DELETE tienda
+app.delete('/api/tiendas/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE tiendas SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1', [id]);
+    res.json({ message: 'Tienda eliminada' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete tienda' });
+  }
+});
+
+// --- Pedidos CRUD ---
+
+// GET all pedidos
+app.get('/api/pedidos', async (_req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM pedidos ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch pedidos' });
+  }
+});
+
+// GET pedido by orden number (public tracker – only safe fields returned)
+app.get('/api/pedidos/orden/:orden', async (req, res) => {
+  try {
+    const { orden } = req.params;
+    const result = await pool.query(
+      'SELECT id, orden, nombre, estado, created_at FROM pedidos WHERE UPPER(orden) = UPPER($1)',
+      [orden.trim()]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Pedido no encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch pedido' });
+  }
+});
+
+// GET single pedido
+app.get('/api/pedidos/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('SELECT * FROM pedidos WHERE id = $1', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Pedido no encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch pedido' });
+  }
+});
+
+// POST create pedido
+app.post('/api/pedidos', async (req, res) => {
+  try {
+    const { nombre, correo, telefono, pais, estado_env, ciudad, delegacion, calle, num_ext, num_int, colonia, cp, domicilio, notas, items, subtotal, envio, total } = req.body;
+    
+    // Generar un número de orden único corto
+    const orden = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const result = await pool.query(
+      `INSERT INTO pedidos (orden, nombre, correo, telefono, pais, estado_env, ciudad, delegacion, calle, num_ext, num_int, colonia, cp, domicilio, notas, items, subtotal, envio, total, estado) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING *`,
+      [orden, nombre, correo, telefono, pais, estado_env, ciudad, delegacion, calle, num_ext, num_int, colonia, cp, domicilio, notas, JSON.stringify(items), subtotal, envio, total, 'Pendiente de pago']
+    );
+    const pedidoCreado = result.rows[0];
+
+    // Enviar correo de confirmación al cliente en background
+    sendOrderConfirmationEmail(pedidoCreado).catch(console.error);
+
+    res.status(201).json(pedidoCreado);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create pedido', details: err.message });
+  }
+});
+
+async function manejarDescuentoStock(pedidoId, nuevoEstado) {
+  const ESTADOS_DESCUENTO = ['Nuevo', 'En proceso', 'Guía Generada'];
+  if (!ESTADOS_DESCUENTO.includes(nuevoEstado)) return;
+
+  try {
+    const pRes = await pool.query('SELECT items, stock_descontado FROM pedidos WHERE id = $1', [pedidoId]);
+    if (pRes.rows.length === 0) return;
+    const pedido = pRes.rows[0];
+
+    if (pedido.stock_descontado) return; // Ya se descontó
+
+    const items = typeof pedido.items === 'string' ? JSON.parse(pedido.items) : (pedido.items || []);
+    
+    for (const item of items) {
+      const pId = item.producto_id;
+      const varName = item.variante;
+      const qty = item.cantidad || 1;
+
+      if (!pId) continue;
+
+      const prodRes = await pool.query('SELECT es_variable FROM products WHERE id = $1', [pId]);
+      if (prodRes.rows.length === 0) continue;
+      const es_variable = prodRes.rows[0].es_variable;
+
+      if (es_variable && varName) {
+        await pool.query(
+          'UPDATE product_variations SET stock = stock - $1 WHERE product_id = $2 AND valor = $3',
+          [qty, pId, varName]
+        );
+      } else {
+        await pool.query(
+          'UPDATE products SET stock = stock - $1 WHERE id = $2',
+          [qty, pId]
+        );
+      }
+    }
+
+    await pool.query('UPDATE pedidos SET stock_descontado = true WHERE id = $1', [pedidoId]);
+    console.log(`[STOCK] Stock descontado para pedido ${pedidoId}`);
+  } catch (err) {
+    console.error(`[STOCK] Error al descontar stock del pedido ${pedidoId}:`, err);
+  }
 }
 
-async function capturePayPalOrder(orderId) {
-  const token = await getPayPalAccessToken();
-  const res = await fetch(`${PAYPAL_API}/v2/checkout/orders/${orderId}/capture`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation'
+// PUT update pedido estado (+ dispara correo según el estado)
+app.put('/api/pedidos/:id/estado', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { estado, paqueteria, num_rastreo } = req.body;
+
+    const VALID = ['Pendiente de pago', 'Nuevo', 'En proceso', 'Guía Generada', 'Fallido', 'Cancelado'];
+    if (!VALID.includes(estado)) return res.status(400).json({ error: 'Estado inválido' });
+
+    // Si es Guía Generada, guardar también paquetería y número de rastreo
+    let result;
+    if (estado === 'Guía Generada' && (paqueteria || num_rastreo)) {
+      result = await pool.query(
+        'UPDATE pedidos SET estado = $1, paqueteria = $2, num_rastreo = $3 WHERE id = $4 RETURNING *',
+        [estado, paqueteria || null, num_rastreo || null, id]
+      );
+    } else {
+      result = await pool.query(
+        'UPDATE pedidos SET estado = $1 WHERE id = $2 RETURNING *',
+        [estado, id]
+      );
     }
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to capture PayPal order: ${text}`);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    const pedido = result.rows[0];
+    
+    // Descontar stock si aplica
+    await manejarDescuentoStock(id, estado);
+
+    // Enviar correo en background (no bloqueamos la respuesta)
+    sendStatusEmail(pedido, estado).catch(console.error);
+
+    res.json({ ...pedido, emailEnviado: !!EMAIL_TRIGGERS[estado] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update pedido estado' });
   }
-  return await res.json();
-}
+});
+
+// --- Envia.com API Integration ---
+
+const enviaStateMap = {
+  'aguascalientes': 'AG', 'baja california': 'BC', 'baja california sur': 'BS',
+  'campeche': 'CM', 'chiapas': 'CS', 'chihuahua': 'CH', 'ciudad de mexico': 'CX', 'ciudad de méxico': 'CX', 'cdmx': 'CX',
+  'coahuila': 'CO', 'colima': 'CL', 'durango': 'DG', 'estado de mexico': 'EM', 'estado de méxico': 'EM',
+  'guanajuato': 'GT', 'guerrero': 'GR', 'hidalgo': 'HG', 'jalisco': 'JA', 'michoacan': 'MI', 'michoacán': 'MI',
+  'morelos': 'MO', 'nayarit': 'NA', 'nuevo leon': 'NL', 'nuevo león': 'NL', 'oaxaca': 'OA', 'puebla': 'PU',
+  'queretaro': 'QT', 'querétaro': 'QT', 'quintana roo': 'QR', 'san luis potosi': 'SL', 'san luis potosí': 'SL',
+  'sinaloa': 'SI', 'sonora': 'SO', 'tabasco': 'TB', 'tamaulipas': 'TM', 'tlaxcala': 'TL', 'veracruz': 'VE',
+  'yucatan': 'YU', 'yucatán': 'YU', 'zacatecas': 'ZA'
+};
+
+const getEnviaPayload = async (pedido) => {
+  let totalWeight = 0;
+  for (const item of (pedido.items || [])) {
+    const prodId = item.producto_id || item.id;
+    if (isNaN(parseInt(prodId, 10))) continue; // Evitar error de postgres si el ID es un string alfa
+    const pRes = await pool.query('SELECT peso FROM products WHERE id = $1', [parseInt(prodId, 10)]);
+    const pPeso = pRes.rows[0]?.peso ? parseFloat(pRes.rows[0].peso) : 1;
+    totalWeight += pPeso * item.cantidad;
+  }
+  if (totalWeight < 1) totalWeight = 1;
+
+  const stateCode = enviaStateMap[(pedido.estado_env || '').toLowerCase().trim()] || 'JA';
+
+  return {
+    origin: {
+      name: 'Amigo Merch', company: 'Amigo Merch', email: 'amigomerchmx@gmail.com', phone: '3312345678',
+      street: 'Bodega Principal', number: '1', district: 'Centro', city: 'Zapopan', state: 'JA', country: 'MX', postalCode: '45200', reference: ''
+    },
+    destination: {
+      name: pedido.nombre, company: '', email: pedido.correo || 'amigomerchmx@gmail.com', phone: pedido.telefono || '3300000000',
+      street: pedido.calle || 'Conocida', 
+      number: pedido.num_int ? `${pedido.num_ext || "SN"} Int. ${pedido.num_int}` : (pedido.num_ext || 'SN'),
+      district: pedido.delegacion ? (pedido.colonia ? `${pedido.colonia}, ${pedido.delegacion}` : pedido.delegacion) : (pedido.colonia || 'Centro'), 
+      city: pedido.ciudad || 'Ciudad',
+      state: stateCode, country: pedido.pais === 'Mexico' ? 'MX' : 'MX', postalCode: pedido.cp || '00000', reference: pedido.notas || ''
+    },
+    packages: [{
+      content: 'Ropa y Accesorios', amount: 1, type: 'box', weight: totalWeight, insurance: 0, declaredValue: parseFloat(pedido.total), weightUnit: 'KG', lengthUnit: 'CM', dimensions: { length: 30, width: 20, height: 10 }
+    }],
+    settings: { printFormat: 'PDF', printSize: 'STOCK_4X6' }
+  };
+};
+
+app.post('/api/pedidos/:id/cotizar-envio', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query('SELECT * FROM pedidos WHERE id = $1', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    const payload = await getEnviaPayload(rows[0]);
+    const enviaApiUrl = process.env.ENVIA_API_URL || 'https://api-test.envia.com';
+    const enviaApiKey = process.env.ENVIA_API_KEY;
+    console.log(`[Envia] Usando entorno: ${enviaApiUrl}`);
+    const enviaQueriesUrl = enviaApiUrl.includes('api-test') ? 'https://queries-test.envia.com' : 'https://queries.envia.com';
+
+    // Override package weight/dims/type if custom values sent from frontend
+    if (req.body.peso || req.body.dims || req.body.type) {
+      const { peso, dims, type } = req.body;
+      if (payload.packages && payload.packages.length > 0) {
+        if (peso)         payload.packages[0].weight = parseFloat(peso) || payload.packages[0].weight;
+        if (dims?.length) payload.packages[0].dimensions.length = parseInt(dims.length) || payload.packages[0].dimensions.length;
+        if (dims?.width)  payload.packages[0].dimensions.width  = parseInt(dims.width)  || payload.packages[0].dimensions.width;
+        if (dims?.height) payload.packages[0].dimensions.height = parseInt(dims.height) || payload.packages[0].dimensions.height;
+        if (type)         payload.packages[0].type = type;
+      }
+    }
+
+    // Override origin if a specific bodega was selected from the frontend
+    if (req.body.origen) {
+      const o = req.body.origen;
+      payload.origin = {
+        name:       o.nombre   || payload.origin.name,
+        company:    o.company  || payload.origin.company,
+        email:      o.email    || payload.origin.email,
+        phone:      o.phone    || payload.origin.phone,
+        street:     o.street   || payload.origin.street,
+        number:     o.number   || payload.origin.number,
+        district:   o.district || payload.origin.district,
+        city:       o.city     || payload.origin.city,
+        state:      o.state    || payload.origin.state,
+        country:    o.country  || 'MX',
+        postalCode: o.postalCode || payload.origin.postalCode,
+        reference:  o.reference || ''
+      };
+    }
+
+    // Override destination if edited from the frontend
+    if (req.body.destino) {
+      const d = req.body.destino;
+      payload.destination = {
+        name:       d.nombre     || payload.destination.name,
+        company:    payload.destination.company,
+        email:      d.correo     || payload.destination.email,
+        phone:      d.telefono   || payload.destination.phone,
+        street:     d.calle      || payload.destination.street,
+        number:     d.num_int ? `${d.num_ext || "1"} Int. ${d.num_int}` : (d.num_ext || payload.destination.number),
+        district:   d.delegacion ? (d.colonia ? `${d.colonia}, ${d.delegacion}` : d.delegacion) : (d.colonia || payload.destination.district),
+        city:       d.ciudad     || payload.destination.city,
+        state:      d.estado ? (enviaStateMap[d.estado.toLowerCase().trim()] || 'JA') : payload.destination.state,
+        country:    'MX',
+        postalCode: d.cp         || payload.destination.postalCode,
+        reference:  d.referencia !== undefined ? d.referencia : payload.destination.reference
+      };
+    }
+
+    // Step 1: Dynamically fetch all active carriers for this account
+    let carrierList = [];
+    try {
+      const carriersRes = await fetch(`${enviaQueriesUrl}/carrier?country_code=MX`, {
+        headers: { 'Authorization': `Bearer ${enviaApiKey}` }
+      });
+      const carriersData = await carriersRes.json();
+      if (Array.isArray(carriersData.data)) {
+        carrierList = carriersData.data.map(c => c.carrier_code || c.code || c.name).filter(Boolean);
+      }
+    } catch (e) {
+      console.warn('Could not fetch carrier list from Envia, will try without carrier filter:', e.message);
+    }
+
+    let rates = [];
+
+    // Step 2a: Try a single multicarrier call (no carrier specified) — returns all available rates
+    try {
+      const multiPayload = { ...payload };
+      // Remove shipment field to let Envia return all carriers
+      delete multiPayload.shipment;
+      const response = await fetch(`${enviaApiUrl}/ship/rate/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${enviaApiKey}` },
+        body: JSON.stringify(multiPayload)
+      });
+      const data = await response.json();
+      if (data.meta === 'rate' && Array.isArray(data.data) && data.data.length > 0) {
+        rates = data.data;
+      }
+    } catch (e) {
+      console.warn('Multicarrier rate call failed, falling back to per-carrier calls:', e.message);
+    }
+
+    // Step 2b: Fallback — if multicarrier call returned nothing, iterate over each carrier individually
+    if (rates.length === 0 && carrierList.length > 0) {
+      for (const carrier of carrierList) {
+        try {
+          const ratePayload = { ...payload, shipment: { carrier, type: 1 } };
+          const response = await fetch(`${enviaApiUrl}/ship/rate/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${enviaApiKey}` },
+            body: JSON.stringify(ratePayload)
+          });
+          const data = await response.json();
+          if (data.meta === 'rate' && Array.isArray(data.data) && data.data.length > 0) {
+            rates.push(...data.data);
+          }
+        } catch (e) { console.error(`Error rating carrier ${carrier}:`, e.message); }
+      }
+    }
+
+    res.json({ rates });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to quote shipping' });
+  }
+});
+
+app.post('/api/pedidos/:id/generar-guia', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { carrier, service } = req.body;
+    
+    const { rows } = await pool.query('SELECT * FROM pedidos WHERE id = $1', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
+    
+    if (rows[0].tracking_number) {
+      return res.status(400).json({ error: 'Este pedido ya tiene una guía generada' });
+    }
+
+    const payload = await getEnviaPayload(rows[0]);
+    payload.shipment = { carrier, service, type: 1 };
+
+    // Override package weight/dims/type if custom values sent from frontend
+    if (req.body.peso || req.body.dims || req.body.type) {
+      const { peso, dims, type } = req.body;
+      if (payload.packages && payload.packages.length > 0) {
+        if (peso)         payload.packages[0].weight = parseFloat(peso) || payload.packages[0].weight;
+        if (dims?.length) payload.packages[0].dimensions.length = parseInt(dims.length) || payload.packages[0].dimensions.length;
+        if (dims?.width)  payload.packages[0].dimensions.width  = parseInt(dims.width)  || payload.packages[0].dimensions.width;
+        if (dims?.height) payload.packages[0].dimensions.height = parseInt(dims.height) || payload.packages[0].dimensions.height;
+        if (type)         payload.packages[0].type = type;
+      }
+    }
+
+    // Override origin if a specific bodega was selected from the frontend
+    if (req.body.origen) {
+      const o = req.body.origen;
+      payload.origin = {
+        name:       o.nombre   || payload.origin.name,
+        company:    o.company  || payload.origin.company,
+        email:      o.email    || payload.origin.email,
+        phone:      o.phone    || payload.origin.phone,
+        street:     o.street   || payload.origin.street,
+        number:     o.number   || payload.origin.number,
+        district:   o.district || payload.origin.district,
+        city:       o.city     || payload.origin.city,
+        state:      o.state    || payload.origin.state,
+        country:    o.country  || 'MX',
+        postalCode: o.postalCode || payload.origin.postalCode,
+        reference:  o.reference || ''
+      };
+    }
+
+    // Override destination if edited from the frontend
+    if (req.body.destino) {
+      const d = req.body.destino;
+      payload.destination = {
+        name:       d.nombre     || payload.destination.name,
+        company:    payload.destination.company,
+        email:      d.correo     || payload.destination.email,
+        phone:      d.telefono   || payload.destination.phone,
+        street:     d.calle      || payload.destination.street,
+        number:     d.num_int ? `${d.num_ext || "1"} Int. ${d.num_int}` : (d.num_ext || payload.destination.number),
+        district:   d.delegacion ? (d.colonia ? `${d.colonia}, ${d.delegacion}` : d.delegacion) : (d.colonia || payload.destination.district),
+        city:       d.ciudad     || payload.destination.city,
+        state:      d.estado ? (enviaStateMap[d.estado.toLowerCase().trim()] || 'JA') : payload.destination.state,
+        country:    'MX',
+        postalCode: d.cp         || payload.destination.postalCode,
+        reference:  d.referencia !== undefined ? d.referencia : payload.destination.reference
+      };
+    }
+
+    const response = await fetch(`${process.env.ENVIA_API_URL}/ship/generate/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.ENVIA_API_KEY}` },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+
+    if (data.meta !== 'generate') {
+      return res.status(400).json({ error: 'Error al generar la guía con Envia.com', details: data.error || data });
+    }
+
+    const trackingNumber = data.data[0].trackingNumber;
+    const guiaUrl = data.data[0].label;
+
+    const result = await pool.query(
+      'UPDATE pedidos SET tracking_number = $1, guia_url = $2, carrier = $3 WHERE id = $4 RETURNING *',
+      [trackingNumber, guiaUrl, carrier, id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to generate label' });
+  }
+});
+
+app.post('/api/pedidos/:id/cancelar-guia', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query('SELECT * FROM pedidos WHERE id = $1', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
+    
+    const pedido = rows[0];
+    if (!pedido.tracking_number) return res.status(400).json({ error: 'Este pedido no tiene guía activa para cancelar' });
+
+    // Determinar carrier (si es guía vieja, viene en el body manual)
+    const activeCarrier = pedido.carrier || req.body.carrier;
+    if (!activeCarrier) {
+      return res.status(400).json({ error: 'Falta la paquetería (carrier) para poder cancelar esta guía antigua.' });
+    }
+
+    // Cancelar en Envia.com
+    const response = await fetch(`${process.env.ENVIA_API_URL}/ship/cancel/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.ENVIA_API_KEY}` },
+      body: JSON.stringify({ carrier: activeCarrier, tracking_number: pedido.tracking_number })
+    });
+    const cancelData = await response.json();
+    
+    // Si la respuesta no indica éxito, retornar error (Envia puede rechazar si ya va en camino)
+    if (!response.ok) {
+      return res.status(400).json({ error: 'Error al cancelar en Envia.com', details: cancelData });
+    }
+
+    // Agregar al historial de canceladas
+    const canceledGuide = {
+      tracking_number: pedido.tracking_number,
+      guia_url: pedido.guia_url,
+      carrier: activeCarrier,
+      fecha_cancelacion: new Date().toISOString()
+    };
+    
+    const guiasCanceladas = pedido.guias_canceladas || [];
+    guiasCanceladas.push(canceledGuide);
+
+    // Actualizar pedido en BD
+    const result = await pool.query(
+      'UPDATE pedidos SET tracking_number = NULL, guia_url = NULL, carrier = NULL, guias_canceladas = $1 WHERE id = $2 RETURNING *',
+      [JSON.stringify(guiasCanceladas), id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to cancel label' });
+  }
+});
+
+// GET Envia.com Wallet Balance
+app.get('/api/envia/saldo', async (req, res) => {
+  try {
+    const response = await fetch('https://queries.envia.com/user-information?encoded=false', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${process.env.ENVIA_API_KEY}` }
+    });
+    if (!response.ok) throw new Error('Error de conexión con Envia');
+    const data = await response.json();
+    res.json({ balance: data.company_balance || 0, currency: data.company_currency || 'MXN' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch Envia balance' });
+  }
+});
+
+app.get('/api/webhooks/envia', (req, res) => {
+  res.status(200).send('Webhook Envia GET OK');
+});
+
+app.post('/api/webhooks/envia', async (req, res) => {
+  try {
+    const payload = req.body;
+    console.log('Webhook Envia recibido:', JSON.stringify(payload, null, 2));
+    res.status(200).send('OK');
+
+    const data = payload.data || payload;
+    let trackingNumber = data.trackingNumber || data.tracking_number;
+    let status = data.status || data.state || data.status_description || '';
+    
+    if (trackingNumber && typeof trackingNumber === 'string') {
+      const { rows } = await pool.query('SELECT * FROM pedidos WHERE tracking_number = $1', [trackingNumber]);
+      if (rows.length > 0) {
+        const pedido = rows[0];
+        status = status.toString().toLowerCase();
+        
+        let nuevoEstado = null;
+        if (status.includes('deliver') || status.includes('entregad')) {
+          nuevoEstado = 'Guía Generada';
+        } else if (status.includes('exception') || status.includes('return') || status.includes('cancel') || status.includes('devolución')) {
+          nuevoEstado = 'Fallido';
+        }
+
+        if (nuevoEstado && pedido.estado !== nuevoEstado) {
+          await pool.query('UPDATE pedidos SET estado = $1 WHERE id = $2', [nuevoEstado, pedido.id]);
+          console.log(`[Webhook] Pedido ${pedido.id} actualizado a ${nuevoEstado} por tracking ${trackingNumber}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error en webhook de envia:', err);
+  }
+});
+
+// --- Boletines CRUD ---
+
+// GET all boletines
+app.get('/api/boletines', async (_req, res) => {
+  try {
+    const r = await pool.query('SELECT id, asunto, estado, created_at, sent_at FROM boletines ORDER BY created_at DESC');
+    res.json(r.rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to fetch boletines' }); }
+});
+
+// GET single boletin
+app.get('/api/boletines/:id', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM boletines WHERE id = $1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'No encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to fetch boletin' }); }
+});
+
+// POST create boletin (borrador)
+app.post('/api/boletines', async (req, res) => {
+  const { asunto = '', html = '' } = req.body;
+  try {
+    const r = await pool.query(
+      'INSERT INTO boletines (asunto, html, estado) VALUES ($1, $2, $3) RETURNING *',
+      [asunto.trim(), html, 'Borrador']
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to create boletin' }); }
+});
+
+// PATCH update boletin (asunto, html, estado)
+app.patch('/api/boletines/:id', async (req, res) => {
+  const { asunto, html, estado } = req.body;
+  const VALID_ESTADOS = ['Borrador', 'Programado', 'Enviado'];
+  if (estado && !VALID_ESTADOS.includes(estado)) return res.status(400).json({ error: 'Estado inválido' });
+  try {
+    const r = await pool.query(
+      `UPDATE boletines SET
+        asunto     = COALESCE($1, asunto),
+        html       = COALESCE($2, html),
+        estado     = COALESCE($3, estado)
+       WHERE id = $4 RETURNING *`,
+      [asunto ?? null, html ?? null, estado ?? null, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'No encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to update boletin' }); }
+});
+
+// DELETE boletin
+app.delete('/api/boletines/:id', async (req, res) => {
+  try {
+    const r = await pool.query('DELETE FROM boletines WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'No encontrado' });
+    res.json({ deleted: r.rows[0].id });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to delete boletin' }); }
+});
+
+// POST enviar boletin a todos los suscriptores
+app.post('/api/boletines/:id/enviar', async (req, res) => {
+  try {
+    // 1. Obtener el boletín
+    const bRes = await pool.query('SELECT * FROM boletines WHERE id = $1', [req.params.id]);
+    if (!bRes.rows.length) return res.status(404).json({ error: 'Boletín no encontrado' });
+    const boletin = bRes.rows[0];
+
+    if (boletin.estado === 'Enviado') {
+      return res.status(400).json({ error: 'Este boletín ya fue enviado anteriormente.' });
+    }
+
+    // 2. Obtener suscriptores filtrados por destinatarios seleccionados
+    const sRes = await pool.query('SELECT nombre, correo FROM suscriptores ORDER BY created_at ASC');
+    let suscriptores = sRes.rows;
+
+    // Si el cliente envió una lista de destinatarios, filtramos
+    const { destinatarios } = req.body;
+    if (Array.isArray(destinatarios) && destinatarios.length > 0) {
+      const setDest = new Set(destinatarios.map(d => d.toLowerCase()));
+      suscriptores = suscriptores.filter(s => setDest.has(s.correo.toLowerCase()));
+    }
+
+    if (suscriptores.length === 0) {
+      return res.status(400).json({ error: 'No hay destinatarios seleccionados o ninguno coincide con suscriptores registrados.' });
+    }
+
+    // 3. Enviar correos (en paralelo con Promise.allSettled para no fallar si uno falla)
+    let enviados = 0;
+    let fallidos = 0;
+
+    if (process.env.SMTP_USER) {
+      const results = await Promise.allSettled(
+        suscriptores.map(s =>
+          mailer.sendMail({
+            from:    `"Amigo Merch" <${process.env.SMTP_USER}>`,
+            replyTo: 'amigomerchmx@gmail.com',
+            to:      s.correo,
+            subject: boletin.asunto,
+            html: `
+              <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                ${boletin.html}
+                <hr style="border:none;border-top:1px solid #eee;margin:32px 0;">
+                <p style="color:#aaa;font-size:11px;text-align:center;">
+                  Hola ${s.nombre}, recibiste este correo porque estás suscrito al newsletter de Amigo Merch.<br>
+                  <a href="#" style="color:#aaa;">Cancelar suscripción</a>
+                </p>
+              </div>
+            `,
+          })
+        )
+      );
+      enviados = results.filter(r => r.status === 'fulfilled').length;
+      fallidos = results.filter(r => r.status === 'rejected').length;
+    } else {
+      console.log(`[EMAIL SKIPPED] No SMTP_USER. Would send "${boletin.asunto}" to ${suscriptores.length} suscriptores.`);
+      enviados = suscriptores.length; // simular éxito en dev
+    }
+
+    // 4. Actualizar estado del boletín a Enviado
+    await pool.query(
+      "UPDATE boletines SET estado = 'Enviado', sent_at = NOW() WHERE id = $1",
+      [req.params.id]
+    );
+
+    res.json({
+      ok:        true,
+      enviados,
+      fallidos,
+      total:     suscriptores.length,
+      emailReal: !!process.env.SMTP_USER,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al enviar el boletín.' });
+  }
+});
+
+
+// --- Clientes (derivados de pedidos + historicos) ---
+
+// Import CSV customers
+app.post('/api/clientes/migrar-csv', localUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const results = [];
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => results.push(data))
+    .on('end', async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        
+        for (const row of results) {
+          const email = row.Email ? row.Email.trim() : null;
+          if (!email) continue;
+          
+          const nombre = row.Name || row['\uFEFFName'] || row.Username || 'Sin Nombre';
+          const pedidos_hist = parseInt(row.Orders) || 0;
+          const gastado_hist = parseFloat(row['Total Spend']) || 0;
+          const ciudad = row.City || null;
+          const estado = row.Region || null;
+          const pais = row['Country / Region'] || null;
+          const cp = row['Postal Code'] || null;
+
+          const query = `
+            INSERT INTO clientes (correo, nombre, ciudad, estado, pais, codigo_postal, total_pedidos_historico, total_gastado_historico)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (correo) DO UPDATE SET
+              nombre = COALESCE(EXCLUDED.nombre, clientes.nombre),
+              ciudad = EXCLUDED.ciudad,
+              estado = EXCLUDED.estado,
+              pais = EXCLUDED.pais,
+              codigo_postal = EXCLUDED.codigo_postal,
+              total_pedidos_historico = EXCLUDED.total_pedidos_historico,
+              total_gastado_historico = EXCLUDED.total_gastado_historico
+          `;
+          await client.query(query, [email, nombre, ciudad, estado, pais, cp, pedidos_hist, gastado_hist]);
+        }
+
+        await client.query('COMMIT');
+        try { fs.unlinkSync(req.file.path); } catch(e){} 
+        res.json({ message: 'Migración de clientes completada', count: results.length });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        try { fs.unlinkSync(req.file.path); } catch(e){}
+        console.error('Error migrando CSV de clientes:', error);
+        res.status(500).json({ error: 'Error procesando CSV', details: error.message });
+      } finally {
+        client.release();
+      }
+    });
+});
+
+
+// GET all clientes – agrupados por correo desde la tabla pedidos + historico de clientes
+app.get('/api/clientes', async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      WITH clientes_agrupados AS (
+          SELECT
+              correo,
+              MAX(nombre) AS nombre,
+              MAX(telefono) AS telefono,
+              COUNT(*)::int AS pedidos_app,
+              SUM(total)::numeric AS gastado_app,
+              MIN(created_at) AS primera_compra,
+              MAX(created_at) AS ultima_compra
+          FROM pedidos
+          GROUP BY correo
+      )
+      SELECT
+          COALESCE(c.correo, p.correo) AS correo,
+          COALESCE(p.nombre, c.nombre) AS nombre,
+          COALESCE(p.telefono, c.telefono) AS telefono,
+          (COALESCE(c.total_pedidos_historico, 0) + COALESCE(p.pedidos_app, 0)) AS total_pedidos,
+          (COALESCE(c.total_gastado_historico, 0) + COALESCE(p.gastado_app, 0)) AS total_gastado,
+          COALESCE(p.primera_compra, c.created_at) AS primera_compra,
+          COALESCE(p.ultima_compra, c.ultima_actividad) AS ultima_compra
+      FROM clientes c
+      FULL OUTER JOIN clientes_agrupados p ON LOWER(c.correo) = LOWER(p.correo)
+      ORDER BY ultima_compra DESC NULLS LAST
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch clientes' });
+  }
+});
+
+// GET detalle de un cliente: todos sus pedidos ordenados desc
+app.get('/api/clientes/:correo', async (req, res) => {
+  try {
+    const { correo } = req.params;
+    
+    const clienteRes = await pool.query('SELECT * FROM clientes WHERE LOWER(correo) = LOWER($1)', [correo]);
+    const historico = clienteRes.rows[0] || null;
+
+    const pedidosRes = await pool.query(
+      `SELECT id, orden, nombre, correo, telefono, ciudad, estado, total, created_at
+       FROM pedidos
+       WHERE LOWER(correo) = LOWER($1)
+       ORDER BY created_at DESC`,
+      [correo]
+    );
+
+    if (pedidosRes.rows.length === 0 && !historico) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+
+    res.json({
+      historico,
+      pedidos: pedidosRes.rows
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch cliente pedidos' });
+  }
+});
+
+// --- Suscriptores ---
+
+
+// GET all suscriptores
+app.get('/api/suscriptores', async (_req, res) => {
+  try {
+    const result = await pool.query('SELECT id, nombre, correo, created_at FROM suscriptores ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch suscriptores' });
+  }
+});
+
+// POST create suscriptor
+app.post('/api/suscriptores', async (req, res) => {
+  const { nombre, correo } = req.body;
+  if (!nombre || !correo) return res.status(400).json({ error: 'Nombre y correo son requeridos' });
+  try {
+    // Generate a random 8-char alphanumeric ID
+    const id = Math.random().toString(36).substring(2, 10).toUpperCase();
+    const result = await pool.query(
+      'INSERT INTO suscriptores (id, nombre, correo) VALUES ($1, $2, $3) RETURNING *',
+      [id, nombre.trim(), correo.trim().toLowerCase()]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Este correo ya está registrado' });
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create suscriptor' });
+  }
+});
+
+// DELETE suscriptor
+app.delete('/api/suscriptores/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM suscriptores WHERE id = $1', [id]);
+    res.json({ message: 'Suscriptor eliminado' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete suscriptor' });
+  }
+});
+
+// --- Estadísticas ---
+app.get('/api/estadisticas/live', async (_req, res) => {
+  try {
+    // 1. Pedidos Nuevos
+    const pnRes = await pool.query("SELECT COUNT(*) FROM pedidos WHERE estado = 'Nuevo'");
+    const pedidosNuevos = parseInt(pnRes.rows[0].count, 10);
+
+    // 2. Ingresos del día
+    // 'CURRENT_DATE' usa la zona horaria del servidor
+    const indRes = await pool.query("SELECT SUM(total) FROM pedidos WHERE DATE(created_at) = CURRENT_DATE AND estado NOT IN ('Cancelado', 'Fallido')");
+    const ingresosHoy = parseFloat(indRes.rows[0].sum || 0);
+
+    // 3. Best Seller (Producto más vendido activo)
+    const bsRes = await pool.query(`
+      SELECT p.id, p.nombre, p.imagen_principal, p.precio, SUM((i->>'cantidad')::int) as vendidos
+      FROM pedidos ped
+      CROSS JOIN json_array_elements(ped.items::json) as i
+      JOIN products p ON (i->>'producto_id')::int = p.id
+      WHERE p.activo = true AND ped.estado NOT IN ('Cancelado', 'Fallido')
+      GROUP BY p.id, p.nombre, p.imagen_principal, p.precio
+      ORDER BY vendidos DESC
+      LIMIT 1
+    `);
+    const bestSeller = bsRes.rows.length ? bsRes.rows[0] : null;
+
+    res.json({
+      pedidosNuevos,
+      ingresosHoy,
+      bestSeller
+    });
+  } catch (err) {
+    console.error('Error fetching estadisticas:', err);
+    res.status(500).json({ error: 'Failed to fetch estadisticas' });
+  }
+});
+
+// Ventas por mes (Cardiograma)
+app.get('/api/estadisticas/ventas-mes', async (req, res) => {
+  try {
+    const today = new Date();
+    const year = parseInt(req.query.anio) || today.getFullYear();
+    const month = parseInt(req.query.mes) || (today.getMonth() + 1);
+
+    const result = await pool.query(`
+      SELECT 
+        EXTRACT(DAY FROM created_at) AS dia,
+        SUM(total) AS total_dia
+      FROM pedidos
+      WHERE 
+        EXTRACT(YEAR FROM created_at) = $1
+        AND EXTRACT(MONTH FROM created_at) = $2
+        AND estado NOT IN ('Cancelado', 'Fallido')
+      GROUP BY dia
+      ORDER BY dia ASC
+    `, [year, month]);
+
+    // Format output as array of { dia, total }
+    const datosDia = result.rows.map(r => ({
+      dia: parseInt(r.dia, 10),
+      total: parseFloat(r.total_dia)
+    }));
+
+    res.json({ anio: year, mes: month, datos: datosDia });
+  } catch (err) {
+    console.error('Error fetching ventas-mes:', err);
+    res.status(500).json({ error: 'Failed to fetch ventas-mes' });
+  }
+});
+
+// --- Reporte de Ventas Mensuales ---
+// GET /api/reportes/ventas?anio=2025&tienda_id=1&mes=Enero
+app.get('/api/reportes/ventas', async (req, res) => {
+  try {
+    const today = new Date();
+    const anio = parseInt(req.query.anio) || today.getFullYear();
+    const { tienda_id, mes } = req.query;
+
+    const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    // Use EXTRACT(MONTH) to avoid locale-dependent TO_CHAR month names (English vs Spanish)
+    let query = `
+      SELECT
+        EXTRACT(MONTH FROM p.created_at)::int AS mes_num,
+        item->>'nombre' AS producto,
+        SUM((item->>'cantidad')::numeric * (item->>'precio')::numeric) AS total
+      FROM pedidos p
+      CROSS JOIN json_array_elements(p.items::json) AS item
+      WHERE
+        EXTRACT(YEAR FROM p.created_at) = $1
+        AND p.estado NOT IN ('Cancelado', 'Fallido')
+    `;
+
+    const params = [anio];
+    let paramIdx = 2;
+
+    // Filter by tienda using EXISTS subquery
+    // NOTE: items JSON uses 'producto_id' (not 'id') for the real product ID
+    if (tienda_id && tienda_id !== 'todas') {
+      const tiendaRes = await pool.query('SELECT nombre FROM tiendas WHERE id = $1', [tienda_id]);
+      if (tiendaRes.rows.length) {
+        query += ` AND EXISTS (
+          SELECT 1 FROM products WHERE id = (item->>'producto_id')::int AND tienda = $${paramIdx}
+        )`;
+        params.push(tiendaRes.rows[0].nombre);
+        paramIdx++;
+      }
+    }
+
+    // Filter by specific month number
+    if (mes && mes !== 'todos') {
+      const mesNum = MESES.indexOf(mes) + 1;
+      if (mesNum > 0) {
+        query += ` AND EXTRACT(MONTH FROM p.created_at) = $${paramIdx}`;
+        params.push(mesNum);
+        paramIdx++;
+      }
+    }
+
+    query += `
+      GROUP BY mes_num, item->>'nombre'
+      ORDER BY mes_num ASC, producto ASC
+    `;
+
+    const result = await pool.query(query, params);
+
+    // Build monthly totals for charts using Spanish month names
+    const porMes = {};
+    MESES.forEach(m => { porMes[m] = 0; });
+
+    const rows = result.rows.map(r => {
+      const mesNombre = MESES[r.mes_num - 1]; // Map month number → Spanish name
+      const total = parseFloat(r.total);
+      if (porMes[mesNombre] !== undefined) porMes[mesNombre] += total;
+      return { mes: mesNombre, producto: r.producto, total };
+    });
+
+    res.json({ rows, porMes });
+  } catch (err) {
+    console.error('Error fetching reporte ventas:', err);
+    res.status(500).json({ error: 'Failed to fetch reporte de ventas', details: err.message });
+  }
+});
 
 // --- PayPal Endpoints ---
 app.get('/api/config/paypal', (req, res) => {
@@ -139,15 +1786,13 @@ app.post('/api/paypal/capture-order', async (req, res) => {
       [pedidoCreado.id, 'En proceso']
     );
 
-    // Update stock and send email if functions exist
     if (typeof manejarDescuentoStock === 'function') {
       await manejarDescuentoStock(pedidoCreado.id, 'En proceso');
     }
-    if (typeof sendOrderConfirmationEmail === 'function') {
-      sendOrderConfirmationEmail(pedidoCreado).catch(console.error);
+    if (typeof sendStatusEmail === 'function') {
+      sendStatusEmail(pedidoCreado, 'En proceso').catch(console.error);
     }
     
-    // Check if this user was already a client
     const clienteExistente = await pool.query('SELECT * FROM clientes WHERE correo = $1', [form.correo]);
     if (clienteExistente.rows.length === 0) {
       await pool.query(
