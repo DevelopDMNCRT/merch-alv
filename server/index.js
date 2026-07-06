@@ -20,87 +20,95 @@ const mailer = nodemailer.createTransport({
   },
 });
 
+// ── Merch ALV Brand Helpers ───────────────────────────────────────────────────
+const LOGO_URL = 'https://merch-alv-client.vercel.app/logo-light-01.png';
+const BRAND_NAME = 'Merch ALV';
+const BRAND_EMAIL = 'contacto@merchalv.mx';
+const BRAND_URL = 'https://merch-alv-client.vercel.app';
+
+// Header con logo — arriba a la izquierda
+const emailHeader = () => `
+  <div style="background:#000000;padding:20px 28px;border-radius:8px 8px 0 0">
+    <img src="${LOGO_URL}" alt="Merch ALV" style="height:40px;display:block;filter:invert(1)" />
+  </div>
+`;
+
+// Footer estándar
+const emailFooter = () => `
+  <hr style="border:none;border-top:1px solid #e4e4e7;margin:28px 0">
+  <p style="color:#a1a1aa;font-size:12px;text-align:center;margin:0">
+    ${BRAND_NAME} · <a href="mailto:${BRAND_EMAIL}" style="color:#a1a1aa">${BRAND_EMAIL}</a>
+  </p>
+`;
+
+// Wrapper base del correo
+const emailWrap = (inner) => `
+  <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:580px;margin:0 auto;background:#ffffff;border:1px solid #e4e4e7;border-radius:10px;overflow:hidden">
+    ${emailHeader()}
+    <div style="padding:28px">
+      ${inner}
+      ${emailFooter()}
+    </div>
+  </div>
+`;
+
+// Botón negro primario
+const btnPrimary = (href, text) =>
+  `<div style="text-align:center;margin:28px 0"><a href="${href}" style="background:#000000;color:#ffffff;padding:13px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;display:inline-block;letter-spacing:0.5px">${text}</a></div>`;
+
+// Botón rojo para acciones de alerta
+const btnDanger = (href, text) =>
+  `<div style="text-align:center;margin:28px 0"><a href="${href}" style="background:#ef4444;color:#ffffff;padding:13px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;display:inline-block;letter-spacing:0.5px">${text}</a></div>`;
+
 // Estados que disparan correo al cliente y la plantilla correspondiente
 const EMAIL_TRIGGERS = {
   'En proceso': (p) => ({
-    subject: `¡Estamos procesando tu pedido #${p.orden}! — Amigo Merch`,
-    html: `
-      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
-        <div style="text-align:center;margin-bottom:24px">
-          <h1 style="color:#237650;font-size:24px;margin:0">¡Estamos procesando tu pedido! ⚙️</h1>
-        </div>
-        <p>Hola <strong>${p.nombre}</strong>,</p>
-        <p>Hemos confirmado tu pago y <strong>ya estamos preparando tu pedido #${p.orden}</strong> con todo el cariño para que llegue perfecto a tus manos.</p>
-        <p>Te avisaremos en cuanto lo enviemos. Puedes consultar el estado de tu pedido en cualquier momento aquí:</p>
-        <div style="text-align:center;margin:24px 0">
-          <a href="https://amigo-merch.vercel.app/rastreo" style="background:#237650;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Rastrear mi pedido</a>
-        </div>
-        <p style="color:#666;font-size:13px">Número de pedido: <strong>#${p.orden}</strong></p>
-        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px;text-align:center">Amigo Merch · <a href="mailto:amigomerchmx@gmail.com" style="color:#aaa">amigomerchmx@gmail.com</a></p>
-      </div>
-    `
+    subject: `¡Estamos procesando tu pedido #${p.orden}! — ${BRAND_NAME}`,
+    html: emailWrap(`
+      <h1 style="color:#000000;font-size:22px;margin:0 0 16px 0;font-weight:800">¡Estamos procesando tu pedido! ⚙️</h1>
+      <p style="color:#3f3f46;line-height:1.6">Hola <strong>${p.nombre}</strong>,</p>
+      <p style="color:#3f3f46;line-height:1.6">Hemos confirmado tu pago y <strong>ya estamos preparando tu pedido #${p.orden}</strong> con todo el cariño para que llegue perfecto a tus manos.</p>
+      <p style="color:#3f3f46;line-height:1.6">Te avisaremos en cuanto lo enviemos. Puedes consultar el estado de tu pedido aquí:</p>
+      ${btnPrimary(BRAND_URL + '/rastreo', 'Rastrear mi pedido')}
+      <p style="color:#71717a;font-size:13px;background:#f4f4f5;border-radius:6px;padding:12px 16px;margin:0">Número de pedido: <strong style="color:#000">#${p.orden}</strong></p>
+    `)
   }),
   'Guía Generada': (p) => ({
-    subject: `¡Tu pedido #${p.orden} va en camino! — Amigo Merch`,
-    html: `
-      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
-        <div style="text-align:center;margin-bottom:24px">
-          <h1 style="color:#237650;font-size:24px;margin:0">¡Tu pedido va en camino! 🚚</h1>
-        </div>
-        <p>Hola <strong>${p.nombre}</strong>,</p>
-        <p>¡Buenas noticias! Tu pedido <strong>#${p.orden}</strong> ha sido enviado y está en camino a tu domicilio.</p>
-        ${p.paqueteria ? `
-        <div style="background:#f5f9f7;border-left:4px solid #237650;padding:16px;border-radius:4px;margin:20px 0">
-          <p style="margin:0 0 6px 0;font-weight:bold;color:#237650">Información de envío</p>
-          <p style="margin:0;font-size:14px">📦 Paquetería: <strong>${p.paqueteria}</strong></p>
-          ${p.num_rastreo ? `<p style="margin:4px 0 0 0;font-size:14px">🔍 Número de rastreo: <strong>${p.num_rastreo}</strong></p>` : ''}
-        </div>` : ''}
-        <p>Si tienes alguna duda sobre tu envío, no dudes en contactarnos:</p>
-        <div style="text-align:center;margin:24px 0">
-          <a href="https://amigo-merch.vercel.app/contacto" style="background:#237650;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Contactar a soporte</a>
-        </div>
-        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px;text-align:center">Amigo Merch · <a href="mailto:amigomerchmx@gmail.com" style="color:#aaa">amigomerchmx@gmail.com</a></p>
-      </div>
-    `
+    subject: `¡Tu pedido #${p.orden} va en camino! — ${BRAND_NAME}`,
+    html: emailWrap(`
+      <h1 style="color:#000000;font-size:22px;margin:0 0 16px 0;font-weight:800">¡Tu pedido va en camino! 🚚</h1>
+      <p style="color:#3f3f46;line-height:1.6">Hola <strong>${p.nombre}</strong>,</p>
+      <p style="color:#3f3f46;line-height:1.6">¡Buenas noticias! Tu pedido <strong>#${p.orden}</strong> ha sido enviado y está en camino a tu domicilio.</p>
+      ${p.paqueteria ? `
+      <div style="background:#f4f4f5;border-left:4px solid #000000;padding:16px;border-radius:4px;margin:20px 0">
+        <p style="margin:0 0 6px 0;font-weight:700;color:#000;font-size:14px">Información de envío</p>
+        <p style="margin:0;font-size:14px;color:#3f3f46">📦 Paquetería: <strong>${p.paqueteria}</strong></p>
+        ${p.num_rastreo ? `<p style="margin:6px 0 0 0;font-size:14px;color:#3f3f46">🔍 Número de rastreo: <strong>${p.num_rastreo}</strong></p>` : ''}
+      </div>` : ''}
+      <p style="color:#3f3f46;line-height:1.6">Si tienes alguna duda sobre tu envío, no dudes en contactarnos:</p>
+      ${btnPrimary(BRAND_URL + '/contacto', 'Contactar a soporte')}
+    `)
   }),
   'Cancelado': (p) => ({
-    subject: `Tu pedido #${p.orden} ha sido cancelado — Amigo Merch`,
-    html: `
-      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
-        <div style="text-align:center;margin-bottom:24px">
-          <h1 style="color:#c62828;font-size:24px;margin:0">Pedido cancelado</h1>
-        </div>
-        <p>Hola <strong>${p.nombre}</strong>,</p>
-        <p>Lamentamos informarte que tu pedido <strong>#${p.orden}</strong> ha sido cancelado.</p>
-        <p>Si crees que esto es un error o necesitas ayuda, nuestro equipo está listo para atenderte. Puedes contactarnos directamente desde nuestra página:</p>
-        <div style="text-align:center;margin:24px 0">
-          <a href="https://amigo-merch.vercel.app/contacto" style="background:#c62828;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Ir a la sección de contacto</a>
-        </div>
-        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px;text-align:center">Amigo Merch · <a href="mailto:amigomerchmx@gmail.com" style="color:#aaa">amigomerchmx@gmail.com</a></p>
-      </div>
-    `
+    subject: `Tu pedido #${p.orden} ha sido cancelado — ${BRAND_NAME}`,
+    html: emailWrap(`
+      <h1 style="color:#ef4444;font-size:22px;margin:0 0 16px 0;font-weight:800">Pedido cancelado</h1>
+      <p style="color:#3f3f46;line-height:1.6">Hola <strong>${p.nombre}</strong>,</p>
+      <p style="color:#3f3f46;line-height:1.6">Lamentamos informarte que tu pedido <strong>#${p.orden}</strong> ha sido cancelado.</p>
+      <p style="color:#3f3f46;line-height:1.6">Si crees que esto es un error o necesitas ayuda, nuestro equipo está listo para atenderte:</p>
+      ${btnDanger(BRAND_URL + '/contacto', 'Ir a la sección de contacto')}
+    `)
   }),
   'Fallido': (p) => ({
-    subject: `Tuvimos un problema con tu pedido #${p.orden} — Amigo Merch`,
-    html: `
-      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
-        <div style="text-align:center;margin-bottom:24px">
-          <h1 style="color:#c62828;font-size:24px;margin:0">Hubo un problema con tu pago 😔</h1>
-        </div>
-        <p>Hola <strong>${p.nombre}</strong>,</p>
-        <p>Lamentamos informarte que no pudimos procesar el pago de tu pedido <strong>#${p.orden}</strong>.</p>
-        <p>Esto puede ocurrir por distintas razones: fondos insuficientes, datos incorrectos o una restricción de tu banco. ¡Pero no te preocupes, puedes intentarlo nuevamente!</p>
-        <div style="text-align:center;margin:24px 0">
-          <a href="https://amigo-merch.vercel.app" style="background:#237650;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Intentar de nuevo</a>
-        </div>
-        <p style="color:#666;font-size:13px">Si el problema persiste, contáctanos y con gusto te ayudamos.</p>
-        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px;text-align:center">Amigo Merch · <a href="mailto:amigomerchmx@gmail.com" style="color:#aaa">amigomerchmx@gmail.com</a></p>
-      </div>
-    `
+    subject: `Tuvimos un problema con tu pedido #${p.orden} — ${BRAND_NAME}`,
+    html: emailWrap(`
+      <h1 style="color:#ef4444;font-size:22px;margin:0 0 16px 0;font-weight:800">Hubo un problema con tu pago 😔</h1>
+      <p style="color:#3f3f46;line-height:1.6">Hola <strong>${p.nombre}</strong>,</p>
+      <p style="color:#3f3f46;line-height:1.6">Lamentamos informarte que no pudimos procesar el pago de tu pedido <strong>#${p.orden}</strong>.</p>
+      <p style="color:#3f3f46;line-height:1.6">Esto puede ocurrir por distintas razones: fondos insuficientes, datos incorrectos o una restricción de tu banco. ¡Pero no te preocupes, puedes intentarlo nuevamente!</p>
+      ${btnPrimary(BRAND_URL, 'Intentar de nuevo')}
+      <p style="color:#71717a;font-size:13px">Si el problema persiste, contáctanos y con gusto te ayudamos.</p>
+    `)
   }),
 };
 
@@ -113,54 +121,46 @@ async function sendOrderConfirmationEmail(pedido) {
   const items = typeof pedido.items === 'string' ? JSON.parse(pedido.items) : (pedido.items || []);
   const itemsHtml = items.map(i =>
     `<tr>
-      <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px;color:#333">${i.nombre || i.name || 'Producto'}${i.variante ? ` <span style="color:#888">(${i.variante})</span>` : ''}</td>
-      <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px;color:#333;text-align:center">${i.cantidad || 1}</td>
-      <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px;color:#333;text-align:right">$${parseFloat(i.precio || 0).toFixed(2)}</td>
+      <td style="padding:10px 0;border-bottom:1px solid #e4e4e7;font-size:13px;color:#3f3f46">${i.nombre || i.name || 'Producto'}${i.variante ? ` <span style="color:#a1a1aa">(${i.variante})</span>` : ''}</td>
+      <td style="padding:10px 0;border-bottom:1px solid #e4e4e7;font-size:13px;color:#3f3f46;text-align:center">${i.cantidad || 1}</td>
+      <td style="padding:10px 0;border-bottom:1px solid #e4e4e7;font-size:13px;color:#3f3f46;text-align:right">$${parseFloat(i.precio || 0).toFixed(2)}</td>
     </tr>`
   ).join('');
 
-  const html = `
-    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
-      <div style="text-align:center;margin-bottom:24px">
-        <h1 style="color:#237650;font-size:26px;margin:0">¡Gracias por tu pedido! 🎉</h1>
-      </div>
-      <p>Hola <strong>${pedido.nombre}</strong>,</p>
-      <p>Hemos recibido tu pedido correctamente. En breve recibirás una confirmación de pago y comenzaremos a prepararlo.</p>
+  const html = emailWrap(`
+    <h1 style="color:#000000;font-size:22px;margin:0 0 16px 0;font-weight:800">¡Gracias por tu pedido! 🎉</h1>
+    <p style="color:#3f3f46;line-height:1.6">Hola <strong>${pedido.nombre}</strong>,</p>
+    <p style="color:#3f3f46;line-height:1.6">Hemos recibido tu pedido correctamente. En breve recibirás una confirmación de pago y comenzaremos a prepararlo.</p>
 
-      <div style="background:#f5f9f7;border-radius:8px;padding:20px;margin:20px 0">
-        <p style="margin:0 0 12px 0;font-weight:bold;color:#237650">Resumen de tu pedido <span style="color:#333">#${pedido.orden}</span></p>
-        <table style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr>
-              <th style="text-align:left;font-size:12px;color:#888;padding-bottom:8px;border-bottom:2px solid #eee">Producto</th>
-              <th style="text-align:center;font-size:12px;color:#888;padding-bottom:8px;border-bottom:2px solid #eee">Cant.</th>
-              <th style="text-align:right;font-size:12px;color:#888;padding-bottom:8px;border-bottom:2px solid #eee">Precio</th>
-            </tr>
-          </thead>
-          <tbody>${itemsHtml}</tbody>
-        </table>
-        <div style="margin-top:12px;text-align:right">
-          <p style="margin:4px 0;font-size:13px;color:#666">Envío: <strong>$${parseFloat(pedido.envio || 0).toFixed(2)}</strong></p>
-          <p style="margin:4px 0;font-size:16px;font-weight:bold;color:#237650">Total: $${parseFloat(pedido.total || 0).toFixed(2)}</p>
-        </div>
+    <div style="background:#f4f4f5;border-radius:8px;padding:20px;margin:20px 0">
+      <p style="margin:0 0 14px 0;font-weight:700;color:#000;font-size:14px">Resumen de tu pedido <span style="color:#71717a">#${pedido.orden}</span></p>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="text-align:left;font-size:11px;color:#a1a1aa;padding-bottom:8px;border-bottom:2px solid #e4e4e7;text-transform:uppercase;letter-spacing:0.5px">Producto</th>
+            <th style="text-align:center;font-size:11px;color:#a1a1aa;padding-bottom:8px;border-bottom:2px solid #e4e4e7;text-transform:uppercase;letter-spacing:0.5px">Cant.</th>
+            <th style="text-align:right;font-size:11px;color:#a1a1aa;padding-bottom:8px;border-bottom:2px solid #e4e4e7;text-transform:uppercase;letter-spacing:0.5px">Precio</th>
+          </tr>
+        </thead>
+        <tbody>${itemsHtml}</tbody>
+      </table>
+      <div style="margin-top:14px;text-align:right;border-top:1px solid #e4e4e7;padding-top:12px">
+        <p style="margin:4px 0;font-size:13px;color:#71717a">Envío: <strong style="color:#3f3f46">$${parseFloat(pedido.envio || 0).toFixed(2)}</strong></p>
+        <p style="margin:6px 0 0 0;font-size:16px;font-weight:800;color:#000">Total: $${parseFloat(pedido.total || 0).toFixed(2)}</p>
       </div>
-
-      <p style="color:#666;font-size:13px">📍 Dirección de entrega: <strong>${pedido.domicilio || [pedido.calle, pedido.num_ext, pedido.colonia, pedido.ciudad].filter(Boolean).join(', ')}</strong></p>
-
-      <p>Puedes rastrear el estado de tu pedido en cualquier momento:</p>
-      <div style="text-align:center;margin:24px 0">
-        <a href="https://amigo-merch.vercel.app/rastreo" style="background:#237650;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Rastrear mi pedido</a>
-      </div>
-      <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-      <p style="color:#aaa;font-size:12px;text-align:center">Amigo Merch · <a href="mailto:amigomerchmx@gmail.com" style="color:#aaa">amigomerchmx@gmail.com</a></p>
     </div>
-  `;
+
+    <p style="color:#71717a;font-size:13px">📍 Dirección de entrega: <strong style="color:#3f3f46">${pedido.domicilio || [pedido.calle, pedido.num_ext, pedido.colonia, pedido.ciudad].filter(Boolean).join(', ')}</strong></p>
+
+    <p style="color:#3f3f46;line-height:1.6">Puedes rastrear el estado de tu pedido en cualquier momento:</p>
+    ${btnPrimary(BRAND_URL + '/rastreo', 'Rastrear mi pedido')}
+  `);
   try {
     await mailer.sendMail({
-      from: `"Amigo Merch" <${process.env.SMTP_USER}>`,
-      replyTo: 'amigomerchmx@gmail.com',
+      from: process.env.SMTP_FROM || `"${BRAND_NAME}" <${process.env.SMTP_USER}>`,
+      replyTo: BRAND_EMAIL,
       to: pedido.correo,
-      subject: `¡Gracias por tu pedido #${pedido.orden}! — Amigo Merch`,
+      subject: `¡Gracias por tu pedido #${pedido.orden}! — ${BRAND_NAME}`,
       html,
     });
     console.log(`[EMAIL SENT] Confirmación de pedido → ${pedido.correo}`);
@@ -179,8 +179,8 @@ async function sendStatusEmail(pedido, estado) {
   const { subject, html } = trigger(pedido);
   try {
     await mailer.sendMail({
-      from: `"Amigo Merch" <${process.env.SMTP_USER}>`,
-      replyTo: 'amigomerchmx@gmail.com',
+      from: process.env.SMTP_FROM || `"${BRAND_NAME}" <${process.env.SMTP_USER}>`,
+      replyTo: BRAND_EMAIL,
       to:   pedido.correo,
       subject,
       html,
