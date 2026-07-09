@@ -108,12 +108,12 @@
     <!-- ── Right panel – brand visual ─────────────────────────────────────── -->
     <div
       class="hidden lg:flex flex-col items-center justify-center w-1/2 relative overflow-hidden"
-      style="background-color: #237650;"
+      style="background-color: #000000;"
     >
       <!-- Decorative circles -->
-      <div class="absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-10" style="background-color: #F6B200;"></div>
-      <div class="absolute -bottom-32 -left-32 w-[500px] h-[500px] rounded-full opacity-10" style="background-color: #F6B200;"></div>
-      <div class="absolute top-1/3 right-1/4 w-32 h-32 rounded-full opacity-5" style="background-color: #F6B200;"></div>
+      <div class="absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-10" style="background-color: #ef4444;"></div>
+      <div class="absolute -bottom-32 -left-32 w-[500px] h-[500px] rounded-full opacity-10" style="background-color: #ef4444;"></div>
+      <div class="absolute top-1/3 right-1/4 w-32 h-32 rounded-full opacity-5" style="background-color: #ef4444;"></div>
 
       <!-- Content -->
       <div class="relative z-10 flex flex-col items-center text-center px-12 max-w-md">
@@ -135,8 +135,8 @@
             <p class="text-2xl font-bold text-white">100%</p>
             <p class="text-xs text-white/60 mt-0.5">Oficial</p>
           </div>
-          <div class="rounded-2xl px-5 py-3 text-center" style="background: rgba(246,178,0,0.2);">
-            <p class="text-2xl font-bold" style="color: #F6B200;">MXN</p>
+          <div class="rounded-2xl px-5 py-3 text-center" style="background: rgba(239,68,68,0.2);">
+            <p class="text-2xl font-bold" style="color: #ef4444;">MXN</p>
             <p class="text-xs text-white/60 mt-0.5">Moneda base</p>
           </div>
         </div>

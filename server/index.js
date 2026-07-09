@@ -657,30 +657,62 @@ app.post('/api/contact', async (req, res) => {
   };
   const displaySubject = subjectMap[subject] || subject || 'Sin asunto';
 
+  const html = emailWrap(`
+    <h2 style="color:#000000;margin:0 0 16px;font-size:18px">Mensaje de Contacto</h2>
+    <div style="background:#f4f4f5;padding:16px;border-radius:8px;margin-bottom:20px">
+      <p style="margin:0 0 8px;font-size:14px;color:#18181b"><strong>Nombre:</strong> ${name}</p>
+      <p style="margin:0 0 8px;font-size:14px;color:#18181b"><strong>Correo:</strong> ${email}</p>
+      <p style="margin:0 0 8px;font-size:14px;color:#18181b"><strong>Asunto:</strong> ${displaySubject}</p>
+      <p style="margin:0;font-size:14px;color:#18181b"><strong>Mensaje:</strong></p>
+      <p style="white-space: pre-wrap; background:#ffffff; padding: 10px; border-radius: 4px; border: 1px solid #e4e4e7; margin: 8px 0 0 0;">${message}</p>
+    </div>
+  `);
+
   try {
     await mailer.sendMail({
-      from: `"Contacto Amigo Merch" <${process.env.SMTP_USER}>`,
-      to: 'amigomerchmx@gmail.com',
+      from: process.env.SMTP_FROM || `"Contacto Merch ALV" <${process.env.SMTP_USER}>`,
+      to: process.env.SMTP_USER || BRAND_EMAIL,
       replyTo: email,
-      subject: displaySubject,
-      html: `
-        <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-          <div style="display: flex; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #237650; padding-bottom: 15px;">
-            <img src="https://www.amigomerch.mx/logo.png" alt="Amigo Merch" style="height: 40px; margin-right: 15px;">
-            <h2 style="color:#237650; margin: 0;">Amigo Merch | Soporte</h2>
-          </div>
-          <p><strong>Nombre:</strong> ${name}</p>
-          <p><strong>Correo:</strong> ${email}</p>
-          <p><strong>Asunto:</strong> ${displaySubject}</p>
-          <p><strong>Mensaje:</strong></p>
-          <p style="white-space: pre-wrap; background:#f9f9f9; padding: 15px; border-radius: 8px;">${message}</p>
-        </div>
-      `,
+      subject: `Contacto — ${displaySubject}`,
+      html,
     });
     res.json({ success: true, message: 'Mensaje enviado correctamente' });
   } catch (err) {
     console.error('[CONTACT EMAIL ERROR]', err);
     res.status(500).json({ error: 'Error enviando el mensaje' });
+  }
+});
+
+// Quote Project Route
+app.post('/api/quote', async (req, res) => {
+  const { nombre, telefono, servicio } = req.body;
+  if (!nombre || !telefono || !servicio) {
+    return res.status(400).json({ error: 'Nombre, teléfono y servicio son requeridos' });
+  }
+
+  const html = emailWrap(`
+    <h2 style="color:#000000;margin:0 0 16px;font-size:18px">Nueva Solicitud de Cotización</h2>
+    <p style="color:#3f3f46;line-height:1.6;margin:0 0 16px">Se ha recibido una nueva solicitud de cotización para un proyecto desde el sitio web:</p>
+    <div style="background:#f4f4f5;padding:16px;border-radius:8px;margin-bottom:20px">
+      <p style="margin:0 0 8px;font-size:14px;color:#18181b"><strong>Nombre:</strong> ${nombre}</p>
+      <p style="margin:0 0 8px;font-size:14px;color:#18181b"><strong>Teléfono:</strong> ${telefono}</p>
+      <p style="margin:0;font-size:14px;color:#18181b"><strong>Servicio/Proyecto a cotizar:</strong></p>
+      <p style="white-space: pre-wrap; background:#ffffff; padding: 10px; border-radius: 4px; border: 1px solid #e4e4e7; margin: 8px 0 0 0;">${servicio}</p>
+    </div>
+  `);
+
+  try {
+    await mailer.sendMail({
+      from: process.env.SMTP_FROM || `"Contacto Merch ALV" <${process.env.SMTP_USER}>`,
+      to: process.env.SMTP_USER || BRAND_EMAIL,
+      replyTo: BRAND_EMAIL,
+      subject: `Nueva Cotización de Proyecto — ${nombre}`,
+      html,
+    });
+    res.json({ success: true, message: 'Cotización enviada correctamente' });
+  } catch (err) {
+    console.error('[QUOTE EMAIL ERROR]', err);
+    res.status(500).json({ error: 'Error enviando la solicitud de cotización' });
   }
 });
 
@@ -1926,9 +1958,16 @@ app.get('/api/reportes/stock-pdf', async (req, res) => {
       }
     }
     
-    doc.fontSize(20).font('Helvetica').fillColor('#111827').text('Reporte de Inventario');
-    doc.moveDown(0.5);
-    doc.fontSize(12).text(`Total de piezas disponibles: ${totalPiezas}`);
+    const path = require('path');
+    const fs = require('fs');
+    const logoPath = path.join(__dirname, '../client/public/logo-light-01.png');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 432, 45, { width: 130 });
+    }
+    
+    doc.fontSize(24).font('Helvetica-Bold').fillColor('#000000').text('Reporte de Inventario');
+    doc.moveDown(0.2);
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#ef4444').text(`TOTAL PIEZAS DISPONIBLES: ${totalPiezas}`);
     doc.moveDown(1.5);
     
     const tableTop = doc.y;
@@ -1939,7 +1978,10 @@ app.get('/api/reportes/stock-pdf', async (req, res) => {
     let y = tableTop;
 
     const drawHeader = (startY) => {
-      doc.rect(50, startY, 512, rowHeight).fill('#237650');
+      // Black background for table header
+      doc.rect(50, startY, 512, rowHeight).fill('#000000');
+      // Red accent line at the bottom of the header row
+      doc.rect(50, startY + rowHeight - 2, 512, 2).fill('#ef4444');
       doc.font('Helvetica-Bold').fontSize(10).fillColor('#FFFFFF');
       doc.text('Producto', col1X + 10, startY + 8);
       doc.text('Variación (Talla/Color)', col2X + 10, startY + 8);

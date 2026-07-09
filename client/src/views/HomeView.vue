@@ -45,6 +45,48 @@ async function submitNewsletter() {
   }
 }
 
+// Quote Modal
+const showQuoteModal = ref(false)
+const quoteForm = ref({
+  nombre: '',
+  telefono: '',
+  servicio: ''
+})
+const quoteLoading = ref(false)
+const quoteMessage = ref(null) // { type: 'success'|'error', text: '' }
+
+async function submitQuote() {
+  if (!quoteForm.value.nombre.trim() || !quoteForm.value.telefono.trim() || !quoteForm.value.servicio.trim()) return
+  quoteLoading.value = true
+  quoteMessage.value = null
+  try {
+    const res = await fetch('/api/quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nombre: quoteForm.value.nombre.trim(),
+        telefono: quoteForm.value.telefono.trim(),
+        servicio: quoteForm.value.servicio.trim()
+      })
+    })
+    const data = await res.json()
+    if (res.ok) {
+      quoteMessage.value = { type: 'success', text: '¡Cotización enviada con éxito! Te contactaremos pronto.' }
+      quoteForm.value = { nombre: '', telefono: '', servicio: '' }
+      setTimeout(() => {
+        showQuoteModal.value = false
+        quoteMessage.value = null
+      }, 3000)
+    } else {
+      quoteMessage.value = { type: 'error', text: data.error || 'Hubo un error al enviar tu solicitud.' }
+    }
+  } catch (err) {
+    quoteMessage.value = { type: 'error', text: 'Error de conexión. Por favor verifica tu red.' }
+  } finally {
+    quoteLoading.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     const resStores = await fetch('/api/tiendas')
@@ -307,7 +349,7 @@ onMounted(async () => {
           <p class="maquila-desc">{{ t('home.maquilaDesc') }}</p>
         </div>
         <div class="maquila-right-col">
-          <button class="maquila-btn">{{ t('home.maquilaBtn') }}</button>
+          <button class="maquila-btn" @click="showQuoteModal = true">{{ t('home.maquilaBtn') }}</button>
         </div>
       </div>
     </section>
@@ -384,6 +426,67 @@ onMounted(async () => {
         </div>
       </div>
     </section>
+
+    <!-- Modal Cotización -->
+    <transition name="fade-modal">
+      <div v-if="showQuoteModal" class="quote-modal-overlay" @click.self="showQuoteModal = false">
+        <div class="quote-modal-content">
+          <div class="quote-modal-header">
+            <h2>Cotizar Proyecto</h2>
+            <button @click="showQuoteModal = false" class="close-modal-btn" aria-label="Cerrar">&times;</button>
+          </div>
+          
+          <div class="quote-modal-body">
+            <div v-if="quoteMessage" :class="['quote-alert', `alert-${quoteMessage.type}`]">
+              {{ quoteMessage.text }}
+            </div>
+            
+            <form v-if="!quoteMessage || quoteMessage.type !== 'success'" @submit.prevent="submitQuote" class="quote-form">
+              <div class="form-group">
+                <label for="quote-name">Nombre</label>
+                <input 
+                  type="text" 
+                  id="quote-name" 
+                  v-model="quoteForm.nombre" 
+                  placeholder="Ingresa tu nombre completo" 
+                  required
+                  :disabled="quoteLoading"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label for="quote-phone">Teléfono</label>
+                <input 
+                  type="tel" 
+                  id="quote-phone" 
+                  v-model="quoteForm.telefono" 
+                  placeholder="Ej. +52 55 1234 5678" 
+                  required
+                  :disabled="quoteLoading"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label for="quote-service">Servicio a cotizar</label>
+                <textarea 
+                  id="quote-service" 
+                  v-model="quoteForm.servicio" 
+                  rows="3"
+                  placeholder="Describe tu proyecto (ej. 100 Sudaderas negras con bordado en pecho)" 
+                  required
+                  :disabled="quoteLoading"
+                ></textarea>
+              </div>
+              
+              <button type="submit" class="quote-submit-btn" :disabled="quoteLoading">
+                <span v-if="!quoteLoading">Enviar Solicitud</span>
+                <span v-else class="quote-spinner"></span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </transition>
   </main>
 </template>
 
@@ -1644,5 +1747,184 @@ onMounted(async () => {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* Quote Modal Styles */
+.quote-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.quote-modal-content {
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: modal-zoom 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modal-zoom {
+  from { transform: scale(0.9) translateY(10px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.quote-modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.quote-modal-header h2 {
+  font-family: 'Jost', sans-serif;
+  font-weight: 800;
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+.close-modal-btn {
+  font-size: 2rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.close-modal-btn:hover {
+  color: var(--primary-color);
+}
+
+.quote-modal-body {
+  padding: 24px;
+}
+
+.quote-alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+  line-height: 1.4;
+}
+
+.alert-success {
+  background-color: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.alert-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.quote-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.quote-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.quote-form .form-group label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.quote-form .form-group input,
+.quote-form .form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: var(--secondary-color);
+  color: var(--text-main);
+  outline: none;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+.quote-form .form-group input:focus,
+.quote-form .form-group textarea:focus {
+  border-color: var(--primary-color);
+  background: var(--bg-color);
+}
+
+.quote-submit-btn {
+  font-family: 'Jost', sans-serif;
+  font-weight: 800;
+  font-size: 1rem;
+  padding: 14px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: background-color 0.2s, transform 0.1s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.quote-submit-btn:hover {
+  background-color: #27272a;
+}
+
+.quote-submit-btn:active {
+  transform: scale(0.98);
+}
+
+.quote-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.quote-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.fade-modal-enter-active,
+.fade-modal-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.fade-modal-enter-from,
+.fade-modal-leave-to {
+  opacity: 0;
 }
 </style>
