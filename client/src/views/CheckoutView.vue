@@ -97,62 +97,21 @@
 
             <div v-if="loading" class="text-center font-bold my-4">Procesando pedido...</div>
 
-            <!-- PayPal Card Fields Inline Payment Section -->
+            <!-- Mercado Pago Payment Section -->
             <div class="paypal-card-fields-section mt-4" v-if="cartState.items.length > 0">
               <h3>Detalles del Pago</h3>
-              <p class="payment-method-subtitle">Ingresa los datos de tu tarjeta de crédito o débito de manera segura y directa.</p>
+              <p class="payment-method-subtitle">Ingresa los datos de tu tarjeta de crédito o débito de manera segura a través de Mercado Pago.</p>
 
-              <!-- Banner de Depuración Visual -->
-              <div v-if="paypalDebugMessage" class="paypal-debug-banner" style="background:#fffbeb;border:1px solid #fef3c7;color:#b45309;padding:16px;border-radius:12px;font-size:0.95rem;margin-bottom:20px;font-family:'Jost',sans-serif;font-weight:600;line-height:1.5;white-space:pre-line;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+              <!-- Banner de Depuración / Estado -->
+              <div v-if="mpDebugMessage" class="paypal-debug-banner" style="background:#fffbeb;border:1px solid #fef3c7;color:#b45309;padding:16px;border-radius:12px;font-size:0.95rem;margin-bottom:20px;font-family:'Jost',sans-serif;font-weight:600;line-height:1.5;white-space:pre-line;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
                 ⚠️ <strong>Estado de Conexión:</strong>
-                {{ paypalDebugMessage }}
+                {{ mpDebugMessage }}
               </div>
 
-              <!-- Formulario de Campos de Tarjeta -->
-              <div class="card-form-container" v-if="!showFallbackButtons">
-                <div class="form-group">
-                  <label>Nombre del Titular</label>
-                  <input type="text" id="card-holder-name" v-model="formCardholderName" required placeholder="Nombre completo del titular" class="form-input">
-                </div>
-
-                <div class="form-group">
-                  <label>Número de Tarjeta</label>
-                  <div id="card-number-container" class="hosted-field-container" :class="{ 'focused': focusState.number, 'invalid': errors.number }"></div>
-                  <span class="field-error" v-if="errors.number">{{ errors.number }}</span>
-                </div>
-
-                <div class="form-row">
-                  <div class="form-group">
-                    <label>Fecha de Vencimiento</label>
-                    <div id="card-expiry-container" class="hosted-field-container" :class="{ 'focused': focusState.expiry, 'invalid': errors.expiry }"></div>
-                    <span class="field-error" v-if="errors.expiry">{{ errors.expiry }}</span>
-                  </div>
-                  <div class="form-group">
-                    <label>CVV</label>
-                    <div id="card-cvv-container" class="hosted-field-container" :class="{ 'focused': focusState.cvv, 'invalid': errors.cvv }"></div>
-                    <span class="field-error" v-if="errors.cvv">{{ errors.cvv }}</span>
-                  </div>
-                </div>
-
-                <button type="button" class="pay-btn mt-4" :disabled="loading || cartState.items.length === 0 || !isShippingSupported" @click="submitCardPayment">
-                  <span v-if="loading">
-                    <svg class="animate-spin h-5 w-5 mr-3 inline" viewBox="0 0 24 24" fill="none" style="width:20px;height:20px;display:inline-block;vertical-align:middle;margin-right:8px;">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" style="opacity:0.25;"></circle>
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" style="opacity:0.75;"></path>
-                    </svg>
-                    Procesando Pago Seguro...
-                  </span>
-                  <span v-else>
-                    Pagar {{ isShippingSupported ? formatPrice(cartGetters.totalPrice.value + costoEnvio) : '---' }}
-                  </span>
-                </button>
-              </div>
-
-              <!-- Contenedor Fallback de Botones Inteligentes de PayPal (con opción de tarjeta inline) -->
-              <div v-else class="paypal-fallback-container mt-4">
-                <div id="paypal-button-container-fallback"></div>
-              </div>
+              <!-- Contenedor para el Brick de Mercado Pago -->
+              <div id="cardPaymentBrick_container"></div>
             </div>
+
 
             <!-- Botón de simulación removido para producción -->
           </form>
@@ -237,12 +196,12 @@
 </template>
 
 <script setup>
-import { onMounted, ref, reactive, computed, nextTick } from 'vue'
+import { onMounted, ref, reactive, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { cartState, cartGetters, cartActions } from '../store/cart.js'
 import { useLocale } from '../composables/useLocale.js'
 import { formatPrice } from '../store/locale.js'
-import { loadScript } from "@paypal/paypal-js"
+import { currentTheme } from '../store/theme.js'
 
 const { t } = useLocale()
 
@@ -445,23 +404,173 @@ const updateMapFromAddress = async () => {
 
 const checkoutForm = ref(null)
 
-const formCardholderName = ref('')
-const cardBrandText = ref('TARJETA')
-const cardBrandClass = ref('generic')
-const focusState = reactive({
-  number: false,
-  expiry: false,
-  cvv: false
-})
-const errors = reactive({
-  number: '',
-  expiry: '',
-  cvv: ''
-})
-const paypalDebugMessage = ref('')
-const showFallbackButtons = ref(false)
+const mpDebugMessage = ref('')
+const loading = ref(false)
 
-let cardFieldsInstance = null
+
+const loadMercadoPagoScript = () => {
+  return new Promise((resolve, reject) => {
+    if (window.MercadoPago) return resolve(window.MercadoPago);
+    const script = document.createElement('script');
+    script.src = 'https://sdk.mercadopago.com/js/v2';
+    script.async = true;
+    script.onload = () => resolve(window.MercadoPago);
+    script.onerror = () => reject(new Error('No se pudo cargar el SDK de Mercado Pago'));
+    document.head.appendChild(script);
+  });
+};
+
+let mpSDKInstance = null;
+
+let mpPublicKey = '';
+let cardBrickController = null;
+
+const renderMercadoPagoBrick = async () => {
+  if (!mpSDKInstance || !mpPublicKey) return;
+
+  if (cardBrickController) {
+    try {
+      cardBrickController.unmount();
+    } catch (e) {
+      console.warn('Error unmounting Mercado Pago Brick:', e);
+    }
+    cardBrickController = null;
+  }
+
+  const container = document.getElementById('cardPaymentBrick_container');
+  if (container) container.innerHTML = '';
+
+  const isDark = currentTheme.value === 'dark' || 
+                 document.documentElement.classList.contains('dark') || 
+                 document.body.classList.contains('dark') || 
+                 document.documentElement.getAttribute('data-theme') === 'dark';
+
+  const customVariables = {
+    theme: isDark ? 'dark' : 'default',
+    baseColor: isDark ? '#ffffff' : '#111827',
+    baseColorFirstVariant: isDark ? '#1f2937' : '#f3f4f6',
+    baseColorSecondVariant: isDark ? '#374151' : '#e5e7eb',
+    primaryColor: isDark ? '#ffffff' : '#000000',
+    primaryColorFocus: isDark ? '#e5e7eb' : '#1f2937',
+    secondaryColor: isDark ? '#000000' : '#ffffff',
+    formBackgroundColor: isDark ? '#09090b' : '#ffffff',
+    inputBackgroundColor: isDark ? '#18181b' : '#ffffff',
+    inputBorderColor: isDark ? '#27272a' : '#d1d5db',
+    inputFocusedBorderColor: isDark ? '#ffffff' : '#000000',
+    formInputsText: isDark ? '#ffffff' : '#111827',
+    fontSizeMedium: '15px',
+    borderRadiusMedium: '8px',
+    borderRadiusLarge: '12px'
+  };
+
+  const mp = new mpSDKInstance(mpPublicKey, { locale: 'es-MX' });
+  const bricksBuilder = mp.bricks();
+
+  const settings = {
+    initialization: {
+      amount: cartGetters.totalPrice.value + (costoEnvio.value || 0),
+    },
+    customization: {
+      visual: {
+        style: {
+          theme: isDark ? 'dark' : 'default',
+          customVariables: customVariables
+        },
+      },
+      paymentMethods: {
+        maxInstallments: 12,
+      },
+    },
+    callbacks: {
+      onReady: () => {
+        mpDebugMessage.value = '';
+      },
+      onSubmit: async (cardFormData) => {
+        if (checkoutForm.value && !checkoutForm.value.checkValidity()) {
+          checkoutForm.value.reportValidity();
+          alert('Faltan campos obligatorios en el formulario de envío. Por favor complétalos.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return Promise.reject();
+        }
+
+        if (!isShippingSupported.value) {
+          alert('Lo sentimos, el envío no está disponible para tu ubicación.');
+          return Promise.reject();
+        }
+
+        loading.value = true;
+        try {
+          const subtotal = cartGetters.totalPrice.value;
+          const envio = costoEnvio.value;
+          const total = subtotal + envio;
+
+          const items = cartState.items.map(item => ({
+            id: item.cartItemId,
+            producto_id: item.id,
+            nombre: item.name,
+            variante: item.size,
+            imagen: item.image,
+            precio: item.price,
+            cantidad: item.quantity
+          }));
+
+          const payload = {
+            paymentData: cardFormData,
+            form: {
+              nombre: form.nombre,
+              telefono: form.telefono,
+              correo: form.correo,
+              pais: form.pais,
+              estado: form.estado,
+              ciudad: form.ciudad,
+              calle: form.calle,
+              numExt: form.numExt,
+              numInt: form.numInt,
+              colonia: form.colonia,
+              cp: form.cp,
+              notas: form.notas
+            },
+            items,
+            subtotal,
+            envio,
+            total
+          };
+
+          const res = await fetch('/api/mercadopago/process-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.error || 'Error al procesar el pago');
+          }
+
+          alert('¡Pedido confirmado exitosamente!');
+          cartActions.clearCart();
+          router.push('/');
+        } catch (error) {
+          console.error('Error al procesar pago Mercado Pago:', error);
+          alert(`Hubo un problema al procesar el pago: ${error.message}`);
+        } finally {
+          loading.value = false;
+        }
+      },
+      onError: (error) => {
+        console.error('MercadoPago Brick error:', error);
+        mpDebugMessage.value = `Error en el formulario de pago: ${error.message || 'Verifica tus datos'}`;
+      },
+    },
+  };
+
+  cardBrickController = await bricksBuilder.create('cardPayment', 'cardPaymentBrick_container', settings);
+};
+
+// Re-renderizar dinámicamente cuando cambie el tema
+watch(currentTheme, async () => {
+  await renderMercadoPagoBrick();
+});
 
 onMounted(async () => {
   if (cartState.items.length === 0) {
@@ -479,404 +588,47 @@ onMounted(async () => {
   }
 
   try {
-    // 1. Obtener Client ID dinámicamente desde el backend
-    paypalDebugMessage.value = 'Conectando con el servidor local para obtener credenciales...'
-    const configRes = await fetch('/api/config/paypal')
-    if (!configRes.ok) throw new Error('Error al consultar el servidor local /api/config/paypal')
+    mpDebugMessage.value = 'Conectando con el servidor para obtener credenciales de Mercado Pago...'
+    const configRes = await fetch('/api/config/mercadopago')
+    if (!configRes.ok) throw new Error('Error al consultar /api/config/mercadopago')
     const configData = await configRes.json()
-    const clientId = configData.clientId
+    mpPublicKey = configData.publicKey
 
-    if (!clientId) {
-      throw new Error('El Client ID de PayPal recibido está vacío. Verifica que PAYPAL_CLIENT_ID esté configurado en tu servidor/.env')
+    if (!mpPublicKey) {
+      throw new Error('La Public Key de Mercado Pago no está configurada en servidor/.env')
     }
 
-    paypalDebugMessage.value = `Cargando el SDK seguro de PayPal (ID: ${clientId.substring(0, 15)}...)`
+    mpDebugMessage.value = 'Cargando el SDK seguro de Mercado Pago...'
+    mpSDKInstance = await loadMercadoPagoScript()
 
-    // 2. Cargar SDK de JavaScript de PayPal con components=card-fields
-    const paypal = await loadScript({ 
-      "client-id": clientId,
-      currency: "MXN",
-      components: "card-fields"
-    })
-
-    if (!paypal) {
-      throw new Error('No se pudo cargar el SDK de PayPal (objeto window.paypal no definido).')
-    }
-
-    if (!paypal.CardFields) {
-      paypalDebugMessage.value = 'Nota: La función avanzada "Card Fields" no está disponible en esta cuenta o región.\nCargando los botones inteligentes de PayPal de forma segura con opción de Tarjeta Inline...';
-      showFallbackButtons.value = true;
-      
-      await nextTick(); // Esperar a que se monte el contenedor
-      
-      await paypal.Buttons({
-        style: {
-          layout: 'vertical',
-          color: 'gold',
-          shape: 'rect',
-          label: 'pay'
-        },
-        onClick: (data, actions) => {
-          if (!checkoutForm.value.checkValidity()) {
-            checkoutForm.value.reportValidity();
-            return actions.reject();
-          }
-          return actions.resolve();
-        },
-        createOrder: async () => {
-          if (!isShippingSupported.value) throw new Error('Envío no soportado');
-          const total = cartGetters.totalPrice.value + costoEnvio.value;
-          const res = await fetch('/api/paypal/create-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ total })
-          });
-          if (!res.ok) throw new Error('Error al crear la orden');
-          const order = await res.json();
-          return order.id;
-        },
-        onApprove: async (data) => {
-          loading.value = true;
-          try {
-            const subtotal = cartGetters.totalPrice.value;
-            const envio = costoEnvio.value;
-            const total = subtotal + envio;
-
-            const items = cartState.items.map(item => ({
-              id: item.cartItemId,
-              producto_id: item.id,
-              nombre: item.name,
-              variante: item.size,
-              imagen: item.image,
-              precio: item.price,
-              cantidad: item.quantity
-            }));
-
-            const payload = {
-              orderID: data.orderID,
-              form: {
-                nombre: form.nombre,
-                telefono: form.telefono,
-                correo: form.correo,
-                pais: form.pais,
-                estado: form.estado,
-                ciudad: form.ciudad,
-                calle: form.calle,
-                numExt: form.numExt,
-                numInt: form.numInt,
-                colonia: form.colonia,
-                cp: form.cp,
-                notes: form.notes
-              },
-              items,
-              subtotal,
-              envio,
-              total
-            };
-
-            const res = await fetch('/api/paypal/capture-order', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-            });
-
-            if (!res.ok) {
-              const errData = await res.json();
-              throw new Error(errData.error || 'Error al capturar orden en el servidor');
-            }
-
-            alert('¡Pedido confirmado exitosamente!');
-            cartActions.clearCart();
-            router.push('/');
-          } catch (error) {
-            console.error('Error al capturar orden en fallback:', error);
-            alert(`Hubo un problema al procesar el pago: ${error.message}`);
-          } finally {
-            loading.value = false;
-          }
-        },
-        onError: (err) => {
-          console.error("PayPal Smart Buttons Fallback Error:", err);
-          alert("Ocurrió un error con el pago de PayPal.");
-        }
-      }).render("#paypal-button-container-fallback");
-
-      return;
-    }
-
-    paypalDebugMessage.value = 'Inicializando el formulario seguro de tarjeta...'
-
-    // Detectar si el modo oscuro está activo para aplicar estilos visuales idénticos en los iframes
-    const isDark = document.documentElement.classList.contains('dark') || 
-                   document.body.classList.contains('dark') || 
-                   document.documentElement.getAttribute('data-theme') === 'dark';
-
-    const hostedFieldStyle = {
-      input: {
-        'font-size': '16px',
-        'font-family': 'Jost, sans-serif',
-        'color': isDark ? '#ffffff' : '#1f2937',
-        'border': 'none !important',
-        'outline': 'none !important',
-        'box-shadow': 'none !important',
-        'background': 'transparent !important',
-        'padding': '0 16px'
-      },
-      ':focus': {
-        'border': 'none !important',
-        'outline': 'none !important',
-        'box-shadow': 'none !important'
-      },
-      '.invalid': {
-        'color': '#ef4444',
-        'border': 'none !important',
-        'outline': 'none !important',
-        'box-shadow': 'none !important'
-      },
-      '.valid': {
-        'border': 'none !important',
-        'outline': 'none !important',
-        'box-shadow': 'none !important'
-      }
-    }
-
-    // 3. Inicializar el componente CardFields de PayPal
-    const cardFields = paypal.CardFields({
-      style: hostedFieldStyle,
-      createOrder: async () => {
-        try {
-          if (!isShippingSupported.value) throw new Error('Envío no soportado');
-          const total = cartGetters.totalPrice.value + costoEnvio.value;
-          const res = await fetch('/api/paypal/create-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ total })
-          });
-          if (!res.ok) throw new Error('Error al registrar la orden en el servidor');
-          const order = await res.json();
-          return order.id;
-        } catch (err) {
-          console.error('Error en createOrder:', err);
-          throw err;
-        }
-      },
-      onApprove: async (data) => {
-        try {
-          loading.value = true;
-          const subtotal = cartGetters.totalPrice.value;
-          const envio = costoEnvio.value;
-          const total = subtotal + envio;
-
-          const items = cartState.items.map(item => ({
-            id: item.cartItemId,
-            producto_id: item.id,
-            nombre: item.name,
-            variante: item.size,
-            imagen: item.image,
-            precio: item.price,
-            cantidad: item.quantity
-          }));
-
-          const payload = {
-            orderID: data.orderID,
-            form: {
-              nombre: form.nombre,
-              telefono: form.telefono,
-              correo: form.correo,
-              pais: form.pais,
-              estado: form.estado,
-              ciudad: form.ciudad,
-              calle: form.calle,
-              numExt: form.numExt,
-              numInt: form.numInt,
-              colonia: form.colonia,
-              cp: form.cp,
-              notes: form.notas
-            },
-            items,
-            subtotal,
-            envio,
-            total
-          };
-
-          const res = await fetch('/api/paypal/capture-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-
-          if (!res.ok) {
-            const errData = await res.json();
-            throw new Error(errData.error || 'Error en la respuesta del servidor');
-          }
-
-          alert('¡Pedido confirmado exitosamente!');
-          cartActions.clearCart();
-          router.push('/');
-        } catch (error) {
-          console.error('Error al capturar orden:', error);
-          alert(`Hubo un problema al procesar el pago: ${error.message}`);
-        } finally {
-          loading.value = false;
-        }
-      },
-      onError: (err) => {
-        console.error('PayPal CardFields error:', err);
-        alert('Hubo un error con la tarjeta ingresada. Verifica los datos.');
-        loading.value = false;
-      }
-    });
-
-    // Guardar instancia de CardFields
-    cardFieldsInstance = cardFields;
-
-    // Intentar renderizar los campos siempre para mayor compatibilidad
-    try {
-      paypalDebugMessage.value = 'Montando campo: Número de Tarjeta...'
-      const numberField = cardFields.NumberField({ style: hostedFieldStyle });
-      await numberField.render('#card-number-container');
-
-      paypalDebugMessage.value = 'Montando campo: Fecha de Vencimiento...'
-      const expiryField = cardFields.ExpiryField({ style: hostedFieldStyle });
-      await expiryField.render('#card-expiry-container');
-
-      paypalDebugMessage.value = 'Montando campo: Código de Seguridad (CVV)...'
-      const cvvField = cardFields.CVVField({ style: hostedFieldStyle });
-      await cvvField.render('#card-cvv-container');
-
-      // Todo listo y cargado
-      paypalDebugMessage.value = '';
-    } catch (renderError) {
-      throw new Error(`Error durante el montaje de los inputs seguros: ${renderError.message}`);
-    }
+    await renderMercadoPagoBrick();
   } catch (error) {
-    paypalDebugMessage.value = `Error en pasarela: ${error.message}`;
-    console.error("PayPal Init Error:", error);
+    mpDebugMessage.value = `Error en pasarela: ${error.message}`;
+    console.error("MercadoPago Init Error:", error);
   }
-})
+});
 
-const loading = ref(false)
-
-
-
-// Envío del pago directo con tarjeta
-const submitCardPayment = async () => {
-  try {
-    if (checkoutForm.value && !checkoutForm.value.checkValidity()) {
-      checkoutForm.value.reportValidity();
-      alert('Faltan campos obligatorios en el formulario de envío (parte superior). Por favor complétalos para poder continuar.');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
-    if (!formCardholderName.value.trim()) {
-      alert('Por favor ingresa el nombre del titular de la tarjeta.');
-      return;
-    }
-
-    if (!cardFieldsInstance) {
-      alert('La pasarela de pago aún no está lista. Intenta nuevamente.');
-      return;
-    }
-
-    const state = await cardFieldsInstance.getState();
-    console.log('PayPal CardFields State:', state);
-
-    // Revisar propiedades correctas de PayPal JS SDK (cardNumber, expirationDate, cvv)
-    const isValidCard = state && state.isFormValid;
-      
-    if (!isValidCard) {
-      let invalidFields = [];
-      if (state && state.fields) {
-        if (state.fields.cardNumber && !state.fields.cardNumber.isValid) invalidFields.push('Número');
-        if (state.fields.expirationDate && !state.fields.expirationDate.isValid) invalidFields.push('Fecha');
-        if (state.fields.cvv && !state.fields.cvv.isValid) invalidFields.push('CVV');
-        if (state.fields.name && !state.fields.name.isValid) invalidFields.push('Nombre (si lo requiere PayPal interno)');
-      }
-      alert(`PayPal indica que el formulario es inválido.\nCampos con error: ${invalidFields.join(', ')}\n\nEstado Interno de PayPal:\n${JSON.stringify(state, null, 2)}`);
-      return;
-    }
-    
-    loading.value = true;
-    await cardFieldsInstance.submit({
-      cardholderName: formCardholderName.value
-    });
-  } catch (err) {
-    console.error('Submit Error Detallado:', err);
-    alert('Error interno al procesar: ' + (err.message || JSON.stringify(err)));
-    loading.value = false;
-  }
-};
-
-
-
-const processCheckout = async (paypalOrderData = null) => {
-  if (cartState.items.length === 0) return;
-  loading.value = true;
-  
-  try {
-    const subtotal = cartGetters.totalPrice.value;
-    const envio = costoEnvio.value;
-    const total = subtotal + envio;
-
-    // Build address string
-    const parts = [];
-    if (form.calle) parts.push(`${form.calle} ${form.numExt} ${form.numInt ? 'Int. ' + form.numInt : ''}`.trim());
-    if (form.colonia) parts.push(`Col. ${form.colonia}`);
-    if (form.ciudad) parts.push(form.ciudad);
-    if (form.estado) parts.push(form.estado);
-    if (form.cp) parts.push(`C.P. ${form.cp}`);
-    if (form.pais) parts.push(form.pais);
-    const domicilio = parts.join(', ');
-
-    const items = cartState.items.map(item => ({
-      id: item.cartItemId,
-      producto_id: item.id,
-      nombre: item.name,
-      variante: item.size,
-      imagen: item.image,
-      precio: item.price,
-      cantidad: item.quantity
-    }));
-
-    const payload = {
-      ...form,
-      estado_env: form.estado,
-      domicilio,
-      items,
-      subtotal,
-      envio,
-      total,
-      paypalOrderId: paypalOrderData ? paypalOrderData.id : null,
-      metodo_pago: 'PayPal'
-    };
-
-    const res = await fetch('/api/pedidos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) throw new Error('Error al crear el pedido');
-
-    alert('¡Pedido confirmado exitosamente!');
-    cartActions.clearCart();
-    router.push('/');
-  } catch (error) {
-    console.error(error);
-    alert('Ocurrió un error al procesar el pedido. Intenta nuevamente.');
-  } finally {
-    loading.value = false;
-  }
-}
 </script>
 
+
 <style scoped>
+#cardPaymentBrick_container {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+:deep(#cardPaymentBrick_container iframe),
+:deep(#cardPaymentBrick_container > div) {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
 .checkout-view {
   background-color: var(--secondary-color);
   min-height: 100vh;
   padding: 40px 20px;
 }
+
 
 .checkout-container {
   max-width: 1200px;

@@ -188,7 +188,7 @@ export const translations = {
       selectState: 'Selecciona un estado',
       addLocation: 'Agregar localización',
       payCard: 'Tarjeta de Crédito / Débito',
-      payPaypal: 'PayPal',
+      payMercadoPago: 'Mercado Pago',
       payOxxo: 'Pago en OXXO',
       sizeLabel: 'Talla',
       quantityLabel: 'Cantidad',

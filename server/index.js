@@ -8,6 +8,10 @@ const { upload } = require('./cloudinary');
 const multer = require('multer');
 const localUpload = multer({ dest: '/tmp/' });
 const nodemailer = require('nodemailer');
+const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
+const mpClient = new MercadoPagoConfig({
+  accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN || ''
+});
 
 // ── Email transporter ──────────────────────────────────────────────────────
 const mailer = nodemailer.createTransport({
@@ -1763,34 +1767,94 @@ app.get('/api/reportes/ventas', async (req, res) => {
   }
 });
 
-// --- PayPal Endpoints ---
-app.get('/api/config/paypal', (req, res) => {
-  res.json({ clientId: PAYPAL_CLIENT_ID });
+// --- Mercado Pago Endpoints ---
+app.get('/api/config/mercadopago', (_req, res) => {
+  res.json({ publicKey: process.env.MERCADOPAGO_PUBLIC_KEY || '' });
 });
 
-app.post('/api/paypal/create-order', async (req, res) => {
+// Crear preferencia de pago (Checkout Pro / Bricks)
+app.post('/api/mercadopago/create-preference', async (req, res) => {
   try {
-    const { total } = req.body;
-    if (!total || isNaN(parseFloat(total))) {
-      return res.status(400).json({ error: 'Monto total inválido' });
+    const { items, form, total, envio } = req.body;
+    const preference = new Preference(mpClient);
+
+    const mpItems = (items || []).map(item => ({
+      id: String(item.id || item.producto_id),
+      title: `${item.nombre} ${item.variante ? '(' + item.variante + ')' : ''}`.trim(),
+      unit_price: Number(item.precio),
+      quantity: Number(item.cantidad),
+      currency_id: 'MXN'
+    }));
+
+    if (envio && parseFloat(envio) > 0) {
+      mpItems.push({
+        id: 'shipping',
+        title: 'Costo de Envío',
+        unit_price: Number(envio),
+        quantity: 1,
+        currency_id: 'MXN'
+      });
     }
-    const order = await createPayPalOrder(parseFloat(total));
-    res.json(order);
+
+    const body = {
+      items: mpItems,
+      payer: form ? {
+        name: form.nombre,
+        email: form.correo,
+        phone: { number: form.telefono }
+      } : undefined,
+      statement_descriptor: 'MERCH ALV',
+      back_urls: {
+        success: 'https://merch-alv-client.vercel.app/checkout?status=success',
+        failure: 'https://merch-alv-client.vercel.app/checkout?status=failure',
+        pending: 'https://merch-alv-client.vercel.app/checkout?status=pending'
+      },
+      auto_return: 'approved'
+    };
+
+    const response = await preference.create({ body });
+    res.json({ id: response.id, init_point: response.init_point });
   } catch (err) {
-    console.error('PayPal Order Creation Error:', err.message);
-    res.status(500).json({ error: 'No se pudo crear la orden con PayPal', details: err.message });
+    console.error('Error al crear preferencia de MercadoPago:', err);
+    res.status(500).json({ error: 'No se pudo crear la preferencia de pago', details: err.message });
   }
 });
 
-app.post('/api/paypal/capture-order', async (req, res) => {
+// Procesar cobro directo / Card Brick / Payment API
+app.post('/api/mercadopago/process-payment', async (req, res) => {
   try {
-    const { orderID, form, items, subtotal, envio, total } = req.body;
-    if (!orderID) return res.status(400).json({ error: 'orderID es requerido' });
-    if (!form || !items || !total) return res.status(400).json({ error: 'Datos de pedido incompletos' });
+    const { paymentData, form, items, subtotal, envio, total } = req.body;
+    if (!form || !items || !total) {
+      return res.status(400).json({ error: 'Datos de pedido incompletos' });
+    }
 
-    const captureData = await capturePayPalOrder(orderID);
-    if (captureData.status !== 'COMPLETED') {
-      return res.status(400).json({ error: 'El pago no pudo ser capturado exitosamente', status: captureData.status });
+    let status = 'approved';
+
+    if (paymentData && paymentData.token) {
+      const payment = new Payment(mpClient);
+      const paymentBody = {
+        token: paymentData.token,
+        issuer_id: paymentData.issuer_id,
+        payment_method_id: paymentData.payment_method_id,
+        transaction_amount: Number(total),
+        installments: Number(paymentData.installments || 1),
+        description: `Pedido Merch ALV - ${form.nombre}`,
+        payer: {
+          email: form.correo || paymentData.payer?.email,
+          first_name: form.nombre,
+          identification: paymentData.payer?.identification
+        }
+      };
+
+      const paymentResponse = await payment.create({ body: paymentBody });
+      status = paymentResponse.status;
+
+      if (status !== 'approved' && status !== 'in_process') {
+        return res.status(400).json({
+          error: `El pago no fue aprobado. Estado: ${status}`,
+          status_detail: paymentResponse.status_detail
+        });
+      }
     }
 
     const parts = [];
@@ -1835,12 +1899,13 @@ app.post('/api/paypal/capture-order', async (req, res) => {
       );
     }
 
-    res.status(201).json(pedidoCreado);
+    res.status(201).json({ success: true, pedido: pedidoCreado, status });
   } catch (err) {
-    console.error('PayPal Order Capture Error:', err.message);
-    res.status(500).json({ error: 'Error al capturar o registrar el pedido', details: err.message });
+    console.error('MercadoPago Order Process Error:', err.message || err);
+    res.status(500).json({ error: 'Error al procesar el pago con Mercado Pago', details: err.message });
   }
 });
+
 
 // --- Configuracion ---
 
