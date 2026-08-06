@@ -54,12 +54,12 @@
                   <span class="product-price price-discounted">${{ (Number(product.precio || 0) * (1 - product.descuento / 100)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
                   <span class="price-original-strike">${{ Number(product.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
                 </div>
-                <span class="discount-inline-badge">-{{ product.descuento }}% OFF</span>
               </template>
               <template v-else>
                 <span class="product-price">{{ formatPrice(product.precio) }}</span>
               </template>
             </div>
+
 
           </div>
         </router-link>
@@ -340,6 +340,24 @@ onMounted(async () => {
   z-index: 2;
 }
 
+.discount-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: var(--accent-red, #ef4444);
+  color: #ffffff;
+  padding: 5px 11px;
+  border-radius: 14px;
+  z-index: 2;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+
 .product-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -445,16 +463,6 @@ onMounted(async () => {
   line-height: 1;
 }
 
-.discount-inline-badge {
-  font-family: 'Jost', sans-serif;
-  font-size: 0.75rem;
-  font-weight: 800;
-  background-color: #fee2e2;
-  color: #dc2626;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid #fca5a5;
-}
 
 
 /* Responsividad */

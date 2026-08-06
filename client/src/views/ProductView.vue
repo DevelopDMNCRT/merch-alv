@@ -649,14 +649,16 @@ const addToCart = () => {
 
 .discount-badge-detail {
   font-family: 'Jost', sans-serif;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 800;
-  background-color: #fee2e2;
-  color: #dc2626;
+  background-color: var(--accent-red, #ef4444);
+  color: #ffffff;
   padding: 4px 10px;
-  border-radius: 8px;
-  border: 1px solid #fca5a5;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25);
+  letter-spacing: 0.5px;
 }
+
 
 
 .product-description {
