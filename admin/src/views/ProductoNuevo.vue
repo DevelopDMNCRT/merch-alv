@@ -55,12 +55,12 @@
           <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] p-6">
             <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90 mb-5">Datos Generales</h2>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
               <!-- Tienda -->
-              <div class="lg:col-span-2">
+              <div>
                 <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Tienda</label>
                 <select v-model="form.tienda"
-                  class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+                  class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-3 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20">
                   <option value="General">General</option>
                   <option v-for="t in tiendasList" :key="t.id" :value="t.nombre">{{ t.nombre }}</option>
                 </select>
@@ -72,9 +72,9 @@
                   Precio
                 </label>
                 <div class="relative">
-                  <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
                   <input v-model="form.precio" type="number" step="0.01" placeholder="0.00" :disabled="form.esVariable"
-                    class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent pl-8 pr-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 disabled:bg-gray-50 dark:disabled:bg-gray-800/50" />
+                    class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent pl-7 pr-3 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 disabled:bg-gray-50 dark:disabled:bg-gray-800/50" />
                 </div>
               </div>
 
@@ -82,16 +82,16 @@
               <div>
                 <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Stock general</label>
                 <input v-model="form.stock" type="number" placeholder="0" :disabled="form.esVariable"
-                  class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 disabled:bg-gray-50 dark:disabled:bg-gray-800/50" />
+                  class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-3 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 disabled:bg-gray-50 dark:disabled:bg-gray-800/50" />
               </div>
 
               <!-- Envío Especial -->
               <div>
                 <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Envío Esp.</label>
                 <div class="relative">
-                  <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
                   <input v-model="form.envioEspecial" type="number" step="0.01" placeholder="0.00"
-                    class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent pl-8 pr-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+                    class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent pl-7 pr-3 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
                 </div>
               </div>
 
@@ -99,18 +99,20 @@
               <div>
                 <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Peso (kg)</label>
                 <input v-model="form.peso" type="number" step="0.001" placeholder="0.000" :disabled="form.esVariable"
-                  class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 disabled:bg-gray-50 dark:disabled:bg-gray-800/50" />
+                  class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-3 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 disabled:bg-gray-50 dark:disabled:bg-gray-800/50" />
               </div>
+
               <!-- Descuento -->
               <div>
                 <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Desc. (%)</label>
                 <div class="relative">
                   <input v-model="form.descuento" type="number" min="0" max="100" placeholder="0"
-                    class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
-                  <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                    class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent pl-3 pr-7 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+                  <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">%</span>
                 </div>
               </div>
             </div>
+
           </div>
 
           <!-- Variations Section -->
