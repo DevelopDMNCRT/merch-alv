@@ -324,6 +324,7 @@ onMounted(async () => {
               </div>
               <img v-else :src="product.imagen_url" :alt="product.nombre" class="product-image" loading="lazy">
               <span class="product-tag" v-if="product.flag">{{ product.flag }}</span>
+              <span class="discount-badge" v-if="product.descuento > 0">-{{ product.descuento }}%</span>
               <div class="product-overlay">
                 <button class="overlay-btn">{{ t('home.viewProduct') }}</button>
               </div>
@@ -332,10 +333,17 @@ onMounted(async () => {
               <span class="product-artist">{{ product.tienda }}</span>
               <h3 class="product-name">{{ product.nombre }}</h3>
               <div class="product-footer">
-                <span class="product-price">{{ formatPrice(product.precio) }}</span>
+                <template v-if="product.descuento > 0">
+                  <span class="product-price price-discounted">${{ (Number(product.precio || 0) * (1 - product.descuento / 100)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
+                  <span class="price-original">${{ Number(product.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+                </template>
+                <template v-else>
+                  <span class="product-price">{{ formatPrice(product.precio) }}</span>
+                </template>
               </div>
             </div>
           </router-link>
+
         </div>
       </div>
     </section>
@@ -1085,6 +1093,34 @@ onMounted(async () => {
   padding: 6px 14px;
   border-radius: 20px;
   z-index: 2;
+}
+
+.discount-badge {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: var(--accent-red, #ef4444);
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 20px;
+  z-index: 2;
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
+}
+
+.price-discounted {
+  color: var(--accent-red, #ef4444) !important;
+  font-weight: 800;
+}
+
+.price-original {
+  font-family: 'Jost', sans-serif;
+  font-size: 0.9rem;
+  color: var(--text-muted, #9ca3af);
+  text-decoration: line-through;
+  margin-left: 8px;
 }
 
 .product-overlay {

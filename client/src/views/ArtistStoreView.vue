@@ -40,6 +40,7 @@
             </div>
             <img v-else :src="product.imagen_url" :alt="product.nombre" class="product-image" loading="lazy">
             <span class="product-tag" v-if="product.flag">{{ product.flag }}</span>
+            <span class="discount-badge" v-if="product.descuento > 0">-{{ product.descuento }}%</span>
             <div class="product-overlay">
               <button class="overlay-btn">{{ t('store.viewProduct') }}</button>
             </div>
@@ -48,10 +49,17 @@
             <span class="product-artist">{{ storeInfo.name }}</span>
             <h3 class="product-name">{{ product.nombre }}</h3>
             <div class="product-footer">
-              <span class="product-price">{{ formatPrice(product.precio) }}</span>
+              <template v-if="product.descuento > 0">
+                <span class="product-price price-discounted">${{ (Number(product.precio || 0) * (1 - product.descuento / 100)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
+                <span class="price-original">${{ Number(product.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+              </template>
+              <template v-else>
+                <span class="product-price">{{ formatPrice(product.precio) }}</span>
+              </template>
             </div>
           </div>
         </router-link>
+
       </div>
     </div>
   </main>

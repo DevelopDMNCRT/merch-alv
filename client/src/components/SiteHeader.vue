@@ -271,7 +271,13 @@ const handleSearchSubmit = () => {
               <div class="result-info">
                 <span v-if="prod.tienda && prod.tienda !== 'General'" class="result-store-tag">{{ prod.tienda }}</span>
                 <h4 class="result-title">{{ prod.nombre }}</h4>
-                <span class="result-price">${{ Number(prod.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+                <template v-if="prod.descuento > 0">
+                  <span class="result-price price-discounted">${{ (Number(prod.precio || 0) * (1 - prod.descuento / 100)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} <span class="price-original-sm">${{ Number(prod.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span></span>
+                </template>
+                <template v-else>
+                  <span class="result-price">${{ Number(prod.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+                </template>
+
               </div>
             </div>
           </div>
@@ -486,6 +492,19 @@ const handleSearchSubmit = () => {
   font-weight: 700;
   color: var(--text-muted);
 }
+
+.result-price.price-discounted {
+  color: var(--accent-red, #ef4444) !important;
+}
+
+.price-original-sm {
+  text-decoration: line-through;
+  color: var(--text-muted, #9ca3af);
+  font-weight: 500;
+  font-size: 0.8rem;
+  margin-left: 4px;
+}
+
 
 .search-no-results {
   padding: 24px;

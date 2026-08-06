@@ -40,7 +40,19 @@
         <div class="product-info-col">
           <span class="product-artist">{{ product.tienda }}</span>
           <h1 class="product-name-title">{{ product.nombre }}</h1>
-          <p class="product-price-large">{{ formatPrice(displayPrice) }}</p>
+          <div class="price-header-wrapper">
+            <template v-if="product.descuento > 0">
+              <div class="flex-price-row">
+                <span class="product-price-large price-discounted">${{ Number(finalPrice).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
+                <span class="price-original-large">${{ Number(displayPrice).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
+                <span class="discount-badge-detail">-{{ product.descuento }}%</span>
+              </div>
+            </template>
+            <template v-else>
+              <p class="product-price-large">{{ formatPrice(displayPrice) }}</p>
+            </template>
+          </div>
+
 
           <p class="product-description">
             {{ product.descripcion || t('product.defaultDesc') }}
@@ -297,6 +309,16 @@ const displayPrice = computed(() => {
   return product.value.precio;
 });
 
+const finalPrice = computed(() => {
+  const base = Number(displayPrice.value || 0);
+  const desc = Number(product.value.descuento || 0);
+  if (desc > 0) {
+    return base * (1 - desc / 100);
+  }
+  return base;
+});
+
+
 const loadProduct = async () => {
   const id = route.params.id;
   try {
@@ -402,9 +424,10 @@ const addToCart = () => {
 
   const productToCart = { 
     ...product.value, 
-    precio: displayPrice.value,
+    precio: finalPrice.value,
     stock: stock
   };
+
   
   cartActions.addItem(productToCart, label, quantity.value);
 };
@@ -597,7 +620,41 @@ const addToCart = () => {
   font-size: 1.8rem;
   font-weight: 800;
   color: var(--text-main);
+  margin-bottom: 0;
+}
+
+.price-header-wrapper {
   margin-bottom: 24px;
+}
+
+.flex-price-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.price-discounted {
+  color: var(--accent-red, #ef4444) !important;
+}
+
+.price-original-large {
+  font-family: 'Jost', sans-serif;
+  font-size: 1.2rem;
+  color: var(--text-muted, #9ca3af);
+  text-decoration: line-through;
+  font-weight: 600;
+}
+
+.discount-badge-detail {
+  font-family: 'Jost', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 800;
+  background-color: var(--accent-red, #ef4444);
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25);
 }
 
 .product-description {
