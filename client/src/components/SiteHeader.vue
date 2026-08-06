@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import CartDrawer from './CartDrawer.vue'
 import { cartActions, cartGetters } from '../store/cart.js'
 import { useLocale } from '../composables/useLocale.js'
@@ -12,8 +12,29 @@ const isTiendasOpen = ref(false)
 const isDesktopMegamenuOpen = ref(false)
 const stores = ref([])
 
+const searchQuery = ref('')
+const searchResults = ref([])
+const allProducts = ref([])
+const searchInput = ref(null)
+
+const route = useRoute()
+const router = useRouter()
+
 const encode = (str) => {
   return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '')
+}
+
+const fetchSearchProducts = async () => {
+  if (allProducts.value.length === 0) {
+    try {
+      const res = await fetch('/api/products')
+      if (res.ok) {
+        allProducts.value = await res.json()
+      }
+    } catch (err) {
+      console.error('Error fetching products for search:', err)
+    }
+  }
 }
 
 onMounted(async () => {
@@ -27,7 +48,6 @@ onMounted(async () => {
   }
 })
 
-const route = useRoute()
 const isCheckout = computed(() => route.path === '/checkout')
 const { t } = useLocale()
 
@@ -52,15 +72,42 @@ const toggleSearch = () => {
   isSearchOpen.value = !isSearchOpen.value
 }
 
-const searchInput = ref(null)
-
 watch(isSearchOpen, (val) => {
   if (val) {
+    fetchSearchProducts()
+    searchQuery.value = ''
+    searchResults.value = []
     nextTick(() => {
       searchInput.value?.focus()
     })
   }
 })
+
+watch(searchQuery, (q) => {
+  if (!q || !q.trim()) {
+    searchResults.value = []
+    return
+  }
+  const queryLower = q.toLowerCase().trim()
+  searchResults.value = allProducts.value.filter(p => {
+    const matchName = p.nombre && p.nombre.toLowerCase().includes(queryLower)
+    const matchStore = p.tienda && p.tienda.toLowerCase().includes(queryLower)
+    const matchDesc = p.descripcion && p.descripcion.toLowerCase().includes(queryLower)
+    return matchName || matchStore || matchDesc
+  }).slice(0, 6)
+})
+
+const selectProduct = (slug) => {
+  isSearchOpen.value = false
+  router.push(`/producto/${slug}`)
+}
+
+const handleSearchSubmit = () => {
+  if (searchResults.value.length > 0) {
+    selectProduct(searchResults.value[0].slug)
+  }
+}
+
 </script>
 
 <template>
@@ -200,13 +247,40 @@ watch(isSearchOpen, (val) => {
       <div class="search-overlay-inner">
         <input 
           type="text" 
+          v-model="searchQuery"
           class="search-fullscreen-input" 
           :placeholder="t('nav.searchPlaceholder')"
           ref="searchInput" 
           @keyup.esc="toggleSearch"
+          @keyup.enter="handleSearchSubmit"
         />
         <p class="search-hint">{{ t('nav.searchHint') }}</p>
+
+        <!-- Resultados / Sugerencias de Búsqueda -->
+        <div v-if="searchQuery.trim()" class="search-results-container">
+          <div v-if="searchResults.length > 0" class="search-results-grid">
+            <div 
+              v-for="prod in searchResults" 
+              :key="prod.id" 
+              class="search-result-card"
+              @click="selectProduct(prod.slug)"
+            >
+              <div class="result-img-wrapper">
+                <img :src="prod.imagen_url || '/placeholder.png'" :alt="prod.nombre" class="result-img" />
+              </div>
+              <div class="result-info">
+                <span v-if="prod.tienda && prod.tienda !== 'General'" class="result-store-tag">{{ prod.tienda }}</span>
+                <h4 class="result-title">{{ prod.nombre }}</h4>
+                <span class="result-price">${{ Number(prod.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="search-no-results">
+            <p>No se encontraron productos para "<strong>{{ searchQuery }}</strong>"</p>
+          </div>
+        </div>
       </div>
+
     </div>
   </transition>
 </template>
@@ -329,6 +403,94 @@ watch(isSearchOpen, (val) => {
   margin-top: 24px;
   color: var(--text-muted);
   font-size: 1.1rem;
+}
+
+.search-results-container {
+  margin-top: 32px;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: 8px 4px;
+}
+
+.search-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  text-align: left;
+}
+
+.search-result-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  background-color: var(--secondary-color, rgba(0, 0, 0, 0.03));
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+:global(html.dark) .search-result-card {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.search-result-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary-color);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+.result-img-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background-color: #f3f4f6;
+}
+
+.result-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.result-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.result-store-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-red, #ef4444);
+}
+
+.result-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-price {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.search-no-results {
+  padding: 24px;
+  font-size: 1.1rem;
+  color: var(--text-muted);
 }
 
 .fade-search-enter-active,
