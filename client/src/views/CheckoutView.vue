@@ -579,9 +579,25 @@ onMounted(async () => {
   }
 
   try {
-    const rulesRes = await fetch('/api/shipping-rules');
+    const rulesRes = await fetch('/api/reglas-envio');
     if (rulesRes.ok) {
-      shippingRules.value = await rulesRes.json();
+      const rawRules = await rulesRes.json();
+      // Normalizar: el server devuelve 'pais' (string) y 'estados' puede ser JSON string o array
+      shippingRules.value = rawRules.map(r => {
+        // El admin guarda paises como string separado por comas: "México, Estados Unidos"
+        const paisesArray = r.pais
+          ? r.pais.split(',').map(p => p.trim()).filter(Boolean)
+          : [];
+        // estados puede venir como string JSON, array ya parseado, o null
+        let estadosArray = [];
+        if (Array.isArray(r.estados)) {
+          estadosArray = r.estados;
+        } else if (typeof r.estados === 'string' && r.estados) {
+          try { estadosArray = JSON.parse(r.estados); } catch { estadosArray = []; }
+        }
+        return { ...r, paises: paisesArray, estados: estadosArray };
+      });
+
     }
   } catch (err) {
     console.error('Error fetching shipping rules:', err);
