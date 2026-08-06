@@ -103,9 +103,9 @@
               <p class="payment-method-subtitle">Ingresa los datos de tu tarjeta de crédito o débito de manera segura a través de Mercado Pago.</p>
 
               <!-- Banner de Depuración / Estado -->
-              <div v-if="mpDebugMessage" class="paypal-debug-banner" style="background:#fffbeb;border:1px solid #fef3c7;color:#b45309;padding:16px;border-radius:12px;font-size:0.95rem;margin-bottom:20px;font-family:'Jost',sans-serif;font-weight:600;line-height:1.5;white-space:pre-line;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
-                ⚠️ <strong>Estado de Conexión:</strong>
-                {{ mpDebugMessage }}
+              <div v-if="mpDebugMessage" class="paypal-debug-banner" style="background:#fffbeb;border:1px solid #fef3c7;color:#b45309;padding:16px;border-radius:12px;font-size:0.9rem;margin-bottom:20px;font-family:'Jost',sans-serif;font-weight:600;line-height:1.6;white-space:pre-wrap;word-break:break-all;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+                ⚠️ <strong>Error de Mercado Pago:</strong><br>
+                <span style="font-weight:400;">{{ mpDebugMessage }}</span>
               </div>
 
               <!-- Contenedor para el Brick de Mercado Pago -->
@@ -559,7 +559,16 @@ const renderMercadoPagoBrick = async () => {
       },
       onError: (error) => {
         console.error('MercadoPago Brick error:', error);
-        mpDebugMessage.value = `Error en el formulario de pago: ${error.message || 'Verifica tus datos'}`;
+        // Mostrar el error exacto tal como lo devuelve MP
+        const parts = [];
+        if (error.message) parts.push(error.message);
+        if (error.cause && error.cause.length) {
+          error.cause.forEach(c => {
+            if (c.code) parts.push(`Código: ${c.code}`);
+            if (c.description) parts.push(`Descripción: ${c.description}`);
+          });
+        }
+        mpDebugMessage.value = parts.length ? parts.join('\n') : JSON.stringify(error);
       },
     },
   };
