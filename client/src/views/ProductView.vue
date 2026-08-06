@@ -635,14 +635,15 @@ const addToCart = () => {
 }
 
 .price-discounted {
-  color: var(--accent-red, #ef4444) !important;
+  color: #dc2626 !important;
+  font-size: 2rem !important;
 }
 
 .price-original-large {
   font-family: 'Jost', sans-serif;
-  font-size: 1.2rem;
-  color: var(--text-muted, #9ca3af);
-  text-decoration: line-through;
+  font-size: 1.25rem;
+  color: #9ca3af !important;
+  text-decoration: line-through !important;
   font-weight: 600;
 }
 
@@ -650,12 +651,13 @@ const addToCart = () => {
   font-family: 'Jost', sans-serif;
   font-size: 0.85rem;
   font-weight: 800;
-  background-color: var(--accent-red, #ef4444);
-  color: #ffffff;
+  background-color: #fee2e2;
+  color: #dc2626;
   padding: 4px 10px;
-  border-radius: 12px;
-  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25);
+  border-radius: 8px;
+  border: 1px solid #fca5a5;
 }
+
 
 .product-description {
   font-family: 'Jost', sans-serif;

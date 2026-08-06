@@ -334,13 +334,17 @@ onMounted(async () => {
               <h3 class="product-name">{{ product.nombre }}</h3>
               <div class="product-footer">
                 <template v-if="product.descuento > 0">
-                  <span class="product-price price-discounted">${{ (Number(product.precio || 0) * (1 - product.descuento / 100)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
-                  <span class="price-original">${{ Number(product.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+                  <div class="price-discount-box">
+                    <span class="product-price price-discounted">${{ (Number(product.precio || 0) * (1 - product.descuento / 100)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
+                    <span class="price-original-strike">${{ Number(product.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
+                  </div>
+                  <span class="discount-inline-badge">-{{ product.descuento }}% OFF</span>
                 </template>
                 <template v-else>
                   <span class="product-price">{{ formatPrice(product.precio) }}</span>
                 </template>
               </div>
+
             </div>
           </router-link>
 
@@ -1110,18 +1114,40 @@ onMounted(async () => {
   box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
 }
 
-.price-discounted {
-  color: var(--accent-red, #ef4444) !important;
-  font-weight: 800;
+.price-discount-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
-.price-original {
-  font-family: 'Jost', sans-serif;
-  font-size: 0.9rem;
-  color: var(--text-muted, #9ca3af);
-  text-decoration: line-through;
-  margin-left: 8px;
+.price-discounted {
+  color: #dc2626 !important;
+  font-weight: 800;
+  font-size: 1.25rem;
+  line-height: 1.1;
 }
+
+.price-original-strike {
+  font-family: 'Jost', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-decoration: line-through !important;
+  line-height: 1;
+}
+
+.discount-inline-badge {
+  font-family: 'Jost', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background-color: #fee2e2;
+  color: #dc2626;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #fca5a5;
+}
+
 
 .product-overlay {
   position: absolute;
