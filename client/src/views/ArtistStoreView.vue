@@ -50,13 +50,17 @@
             <h3 class="product-name">{{ product.nombre }}</h3>
             <div class="product-footer">
               <template v-if="product.descuento > 0">
-                <span class="product-price price-discounted">${{ (Number(product.precio || 0) * (1 - product.descuento / 100)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
-                <span class="price-original">${{ Number(product.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+                <div class="price-discount-box">
+                  <span class="product-price price-discounted">${{ (Number(product.precio || 0) * (1 - product.descuento / 100)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
+                  <span class="price-original-strike">${{ Number(product.precio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} MXN</span>
+                </div>
               </template>
               <template v-else>
                 <span class="product-price">{{ formatPrice(product.precio) }}</span>
               </template>
             </div>
+
+
           </div>
         </router-link>
 
@@ -336,6 +340,24 @@ onMounted(async () => {
   z-index: 2;
 }
 
+.discount-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: var(--accent-red, #ef4444);
+  color: #ffffff;
+  padding: 5px 11px;
+  border-radius: 14px;
+  z-index: 2;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+
 .product-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -411,12 +433,37 @@ onMounted(async () => {
   align-items: center;
 }
 
+.price-discount-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
 .product-price {
   font-family: 'Jost', sans-serif;
   font-size: 1.2rem;
   font-weight: 700;
   color: var(--text-main);
 }
+
+.price-discounted {
+  color: #dc2626 !important;
+  font-weight: 800;
+  font-size: 1.25rem;
+  line-height: 1.1;
+}
+
+.price-original-strike {
+  font-family: 'Jost', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-decoration: line-through !important;
+  line-height: 1;
+}
+
+
 
 /* Responsividad */
 @media (max-width: 1024px) {
