@@ -13,6 +13,7 @@ const mpClient = new MercadoPagoConfig({
   accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN || ''
 });
 
+
 // ── Email transporter ──────────────────────────────────────────────────────
 const mailer = nodemailer.createTransport({
   host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
@@ -203,6 +204,28 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// ── Logging estructurado ──────────────────────────────────────────────────
+const log = (level, msg, data = {}) => {
+  const ts = new Date().toISOString();
+  const extra = Object.keys(data).length ? ' ' + JSON.stringify(data) : '';
+  console.log(`[${ts}] [${level}] ${msg}${extra}`);
+};
+
+// Request logger — imprime método, ruta y body (sin passwords)
+app.use((req, res, next) => {
+  const start = Date.now();
+  const safeBody = { ...req.body };
+  if (safeBody.password) safeBody.password = '***';
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    const level = res.statusCode >= 500 ? 'ERROR' : res.statusCode >= 400 ? 'WARN' : 'INFO';
+    log(level, `${req.method} ${req.originalUrl} → ${res.statusCode} (${ms}ms)`,
+      res.statusCode >= 400 ? { body: safeBody } : {});
+  });
+  next();
+});
+
 
 // Database Connection
 const pool = new Pool({
@@ -1939,12 +1962,15 @@ app.put('/api/configuracion', async (req, res) => {
 app.get('/api/reglas-envio', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM reglas_envio ORDER BY created_at DESC');
+    log('INFO', `[ENVIO] Reglas cargadas: ${result.rows.length} regla(s)`,
+      { reglas: result.rows.map(r => ({ id: r.id, pais: r.pais, estados: r.estados, precio: r.precio })) });
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    log('ERROR', '[ENVIO] Error al obtener reglas de envio', { error: err.message });
     res.status(500).json({ error: 'Error al obtener reglas de envio' });
   }
 });
+
 
 app.post('/api/reglas-envio', async (req, res) => {
   try {

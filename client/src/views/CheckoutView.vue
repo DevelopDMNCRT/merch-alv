@@ -295,18 +295,32 @@ const currentStates = computed(() => statesData[form.pais] || [])
 
 const onPaisChange = () => {
   form.estado = ''
-  checkShippingSupport()
+  // No checar soporte aún: el usuario acaba de cambiar país y estado está vacío
+  console.log('[ENVIO] País cambiado a:', form.pais, '— esperando selección de estado');
 }
 
 const checkShippingSupport = () => {
-  if (form.pais && (form.pais !== 'México' || form.estado)) {
-    if (!isShippingSupported.value) {
-      shippingErrorModalOpen.value = true
-    }
+  // Solo disparar el error cuando el usuario ya eligió estado (o no es México y no necesita estado)
+  const needsState = form.pais === 'México';
+  const hasState = !!form.estado;
+
+  console.log('[ENVIO] checkShippingSupport', {
+    pais: form.pais,
+    estado: form.estado,
+    reglasCargadas: shippingRules.value.length,
+    costoEnvio: costoEnvio.value,
+    isSupported: isShippingSupported.value
+  });
+
+  if (!form.pais) return;
+  if (needsState && !hasState) return; // Esperar a que elija estado
+
+  if (!isShippingSupported.value) {
+    console.warn('[ENVIO] Sin cobertura para zona:', form.pais, form.estado);
+    shippingErrorModalOpen.value = true;
   }
 }
 
-// Watcher or blur can also trigger checkShippingSupport, but we'll do it on select change.
 
 
 // Map Modal Logic
