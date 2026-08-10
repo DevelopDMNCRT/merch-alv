@@ -744,7 +744,8 @@ app.post('/api/quote', async (req, res) => {
 });
 
 // Basic routes
-app.get('/', (_req, res) => res.json({ message: 'Amigo Merch API is running' }));
+app.get('/', (_req, res) => res.json({ message: 'Merch ALV API is running' }));
+
 
 
 
@@ -1006,17 +1007,18 @@ const getEnviaPayload = async (pedido) => {
 
   return {
     origin: {
-      name: 'Amigo Merch', company: 'Amigo Merch', email: 'amigomerchmx@gmail.com', phone: '3312345678',
-      street: 'Bodega Principal', number: '1', district: 'Centro', city: 'Zapopan', state: 'JA', country: 'MX', postalCode: '45200', reference: ''
+      name: 'Merch ALV', company: 'Merch ALV', email: process.env.SMTP_USER || 'develop@dmncrt.com', phone: '5512345678',
+      street: 'Bosques de Tabachines', number: 'Mz 5 Lt 3', district: 'Los Héroes Tecámac II', city: 'Tecámac', state: 'EM', country: 'MX', postalCode: '55764', reference: ''
     },
     destination: {
-      name: pedido.nombre, company: '', email: pedido.correo || 'amigomerchmx@gmail.com', phone: pedido.telefono || '3300000000',
+      name: pedido.nombre, company: '', email: pedido.correo || 'develop@dmncrt.com', phone: pedido.telefono || '5500000000',
       street: pedido.calle || 'Conocida', 
       number: pedido.num_int ? `${pedido.num_ext || "SN"} Int. ${pedido.num_int}` : (pedido.num_ext || 'SN'),
       district: pedido.delegacion ? (pedido.colonia ? `${pedido.colonia}, ${pedido.delegacion}` : pedido.delegacion) : (pedido.colonia || 'Centro'), 
       city: pedido.ciudad || 'Ciudad',
       state: stateCode, country: pedido.pais === 'Mexico' ? 'MX' : 'MX', postalCode: pedido.cp || '00000', reference: pedido.notas || ''
     },
+
     packages: [{
       content: 'Ropa y Accesorios', amount: 1, type: 'box', weight: totalWeight, insurance: 0, declaredValue: parseFloat(pedido.total), weightUnit: 'KG', lengthUnit: 'CM', dimensions: { length: 30, width: 20, height: 10 }
     }],
@@ -1436,8 +1438,8 @@ app.post('/api/boletines/:id/enviar', async (req, res) => {
       const results = await Promise.allSettled(
         suscriptores.map(s =>
           mailer.sendMail({
-            from:    `"Amigo Merch" <${process.env.SMTP_USER}>`,
-            replyTo: 'amigomerchmx@gmail.com',
+            from:    `"Merch ALV" <${process.env.SMTP_USER}>`,
+            replyTo: process.env.SMTP_USER || 'develop@dmncrt.com',
             to:      s.correo,
             subject: boletin.asunto,
             html: `
@@ -1445,7 +1447,8 @@ app.post('/api/boletines/:id/enviar', async (req, res) => {
                 ${boletin.html}
                 <hr style="border:none;border-top:1px solid #eee;margin:32px 0;">
                 <p style="color:#aaa;font-size:11px;text-align:center;">
-                  Hola ${s.nombre}, recibiste este correo porque estás suscrito al newsletter de Amigo Merch.<br>
+                  Hola ${s.nombre}, recibiste este correo porque estás suscrito al newsletter de Merch ALV.<br>
+
                   <a href="#" style="color:#aaa;">Cancelar suscripción</a>
                 </p>
               </div>
