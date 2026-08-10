@@ -72,20 +72,35 @@
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <div>
                   <label class="mb-1 block text-[11px] font-medium text-gray-500 dark:text-gray-400">1. Continente</label>
-                  <select v-model="selectedContinente" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    <option value="Todos">Todos los Continentes</option>
-                    <option v-for="c in CONTINENTS_LIST" :key="c" :value="c">{{ c }}</option>
-                  </select>
+                  <div class="relative">
+                    <select v-model="selectedContinente" class="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 pr-8 text-sm font-medium text-gray-800 focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-white transition-colors cursor-pointer">
+                      <option value="Todos">Todos los Continentes</option>
+                      <option v-for="c in CONTINENTS_LIST" :key="c" :value="c">{{ c }}</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                      <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label class="mb-1 block text-[11px] font-medium text-gray-500 dark:text-gray-400">2. Agregar País o Continente</label>
-                  <select v-model="selectedPaisDropdown" @change="onPaisDropdownSelect" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    <option value="" disabled selected>Seleccionar opción...</option>
-                    <option v-if="selectedContinente !== 'Todos'" value="__ALL_CONTINENT__">✨ Agregar TODOS los países de {{ selectedContinente }}</option>
-                    <option v-for="p in paisesDisponiblesContinente" :key="p.code" :value="p.name">{{ p.name }} ({{ p.continent }})</option>
-                  </select>
+                  <div class="relative">
+                    <select v-model="selectedPaisDropdown" @change="onPaisDropdownSelect" class="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 pr-8 text-sm font-medium text-gray-800 focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-white transition-colors cursor-pointer">
+                      <option value="" disabled selected>Seleccionar opción...</option>
+                      <option v-if="selectedContinente !== 'Todos'" value="__ALL_CONTINENT__">✨ Agregar TODOS los países de {{ selectedContinente }}</option>
+                      <option v-for="p in paisesDisponiblesContinente" :key="p.code" :value="p.name">{{ p.name }} ({{ p.continent }})</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                      <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
               </div>
+
 
               <label class="mb-1.5 block text-[13px] font-semibold text-gray-700 dark:text-gray-300">Países Seleccionados</label>
               <div class="relative w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus-within:border-gray-400 focus-within:ring-1 focus-within:ring-gray-400 dark:border-gray-700 dark:bg-gray-800 min-h-[42px] flex items-center">
