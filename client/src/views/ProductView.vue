@@ -251,9 +251,11 @@ const getAvailableOptions = (groupNombre) => {
   );
   return allOpts.map(opt => {
     const match = relevant.find(v => v.attrs[groupNombre] === opt);
-    return { valor: opt, available: !!match, color: match?.color || group.colores?.[opt] || null };
+    const hasStock = match && Number(match.stock) > 0;
+    return { valor: opt, available: !!match && hasStock, color: match?.color || group.colores?.[opt] || null };
   });
 };
+
 
 const updateSelectedVariation = () => {
   const groups = attrGroups.value;
