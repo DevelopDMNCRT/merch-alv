@@ -1033,7 +1033,8 @@ app.post('/api/pedidos/:id/cotizar-envio', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     const payload = await getEnviaPayload(rows[0]);
-    const enviaApiUrl = process.env.ENVIA_API_URL || 'https://queries.envia.com';
+    const enviaApiUrl = process.env.ENVIA_API_URL || 'https://api.envia.com';
+
     const enviaApiKey = process.env.ENVIA_API_KEY;
     console.log(`[Envia] Usando entorno: ${enviaApiUrl}`);
     const enviaQueriesUrl = enviaApiUrl.includes('api-test') ? 'https://queries-test.envia.com' : 'https://queries.envia.com';
