@@ -1086,6 +1086,14 @@ const getEnviaPayload = async (pedido) => {
   };
 };
 
+const getEnviaApiBaseUrl = () => {
+  const envUrl = (process.env.ENVIA_API_URL || '').trim();
+  if (!envUrl || envUrl.includes('queries.envia.com')) {
+    return 'https://api.envia.com';
+  }
+  return envUrl;
+};
+
 app.post('/api/pedidos/:id/cotizar-envio', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1093,11 +1101,12 @@ app.post('/api/pedidos/:id/cotizar-envio', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     const payload = await getEnviaPayload(rows[0]);
-    const enviaApiUrl = process.env.ENVIA_API_URL || 'https://api.envia.com';
+    const enviaApiUrl = getEnviaApiBaseUrl();
 
     const enviaApiKey = process.env.ENVIA_API_KEY;
     console.log(`[Envia] Usando entorno: ${enviaApiUrl}`);
     const enviaQueriesUrl = enviaApiUrl.includes('api-test') ? 'https://queries-test.envia.com' : 'https://queries.envia.com';
+
 
     // Override package weight/dims/type if custom values sent from frontend
     if (req.body.peso || req.body.dims || req.body.type) {
@@ -1273,7 +1282,8 @@ app.post('/api/pedidos/:id/generar-guia', async (req, res) => {
       };
     }
 
-    const response = await fetch(`${process.env.ENVIA_API_URL}/ship/generate/`, {
+    const enviaApiUrl = getEnviaApiBaseUrl();
+    const response = await fetch(`${enviaApiUrl}/ship/generate/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.ENVIA_API_KEY}` },
       body: JSON.stringify(payload)
@@ -1315,7 +1325,8 @@ app.post('/api/pedidos/:id/cancelar-guia', async (req, res) => {
     }
 
     // Cancelar en Envia.com
-    const response = await fetch(`${process.env.ENVIA_API_URL}/ship/cancel/`, {
+    const enviaApiUrl = getEnviaApiBaseUrl();
+    const response = await fetch(`${enviaApiUrl}/ship/cancel/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.ENVIA_API_KEY}` },
       body: JSON.stringify({ carrier: activeCarrier, tracking_number: pedido.tracking_number })
