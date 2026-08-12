@@ -30,25 +30,31 @@
 
             <h2 class="mt-4">{{ t('checkout.shippingAddress') }}</h2>
             
-            <div class="form-group">
-              <label>{{ t('checkout.country') }}</label>
-              <select required class="form-input" v-model="form.pais" @change="onPaisChange">
-                <option value="México">México</option>
-                <option value="Estados Unidos">Estados Unidos</option>
-                <option value="Argentina">Argentina</option>
-                <option value="Colombia">Colombia</option>
-                <option value="Panamá">Panamá</option>
-                <option value="España">España</option>
-              </select>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Continente *</label>
+                <select required class="form-input" v-model="form.continente" @change="onContinenteChange">
+                  <option v-for="c in CONTINENTS_LIST" :key="c" :value="c">{{ c }}</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>{{ t('checkout.country') }} *</label>
+                <select required class="form-input" v-model="form.pais" @change="onPaisChange">
+                  <option v-for="country in countriesOfSelectedContinent" :key="country.code" :value="country.name">
+                    {{ country.name }}
+                  </option>
+                </select>
+              </div>
             </div>
 
             <div class="form-row">
               <div class="form-group">
-                <label>{{ t('checkout.stateProvince') }}</label>
-                <select required class="form-input" v-model="form.estado" @change="checkShippingSupport">
+                <label>{{ t('checkout.stateProvince') }} *</label>
+                <select v-if="form.pais === 'México' || form.pais === 'Mexico'" required class="form-input" v-model="form.estado" @change="checkShippingSupport">
                   <option value="" disabled selected>{{ t('checkout.selectState') }}</option>
                   <option v-for="estado in currentStates" :key="estado" :value="estado">{{ estado }}</option>
                 </select>
+                <input v-else type="text" required placeholder="Estado / Provincia / Región" v-model="form.estado" @blur="checkShippingSupport" class="form-input">
               </div>
               <div class="form-group">
                 <label>{{ t('checkout.city') }}</label>
@@ -229,10 +235,13 @@ const statesData = {
   'España': ['Madrid', 'Cataluña', 'Andalucía', 'Valencia', 'Galicia', 'Otro']
 }
 
+import { CONTINENTS_LIST, getCountriesByContinent } from '../utils/countriesCatalog.js'
+
 const form = reactive({
   nombre: '',
   telefono: '',
   correo: '',
+  continente: 'América del Norte',
   pais: 'México',
   estado: '',
   ciudad: '',
@@ -243,6 +252,19 @@ const form = reactive({
   cp: '',
   notas: ''
 })
+
+const countriesOfSelectedContinent = computed(() => getCountriesByContinent(form.continente))
+
+const currentStates = computed(() => statesData[form.pais] || [])
+
+const onContinenteChange = () => {
+  const available = countriesOfSelectedContinent.value
+  if (available.length > 0) {
+    form.pais = available[0].name
+  }
+  form.estado = ''
+  checkShippingSupport()
+}
 
 const shippingRules = ref([])
 const shippingErrorModalOpen = ref(false)
@@ -291,7 +313,6 @@ const costoEnvio = computed(() => {
 
 const isShippingSupported = computed(() => costoEnvio.value !== null)
 
-const currentStates = computed(() => statesData[form.pais] || [])
 
 const onPaisChange = () => {
   form.estado = ''

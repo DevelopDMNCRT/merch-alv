@@ -744,7 +744,8 @@ app.post('/api/quote', async (req, res) => {
 });
 
 // Basic routes
-app.get('/', (_req, res) => res.json({ message: 'Amigo Merch API is running' }));
+app.get('/', (_req, res) => res.json({ message: 'Merch ALV API is running' }));
+
 
 
 
@@ -921,12 +922,12 @@ async function manejarDescuentoStock(pedidoId, nuevoEstado) {
 
       if (es_variable && varName) {
         await pool.query(
-          'UPDATE product_variations SET stock = stock - $1 WHERE product_id = $2 AND valor = $3',
+          'UPDATE product_variations SET stock = GREATEST(0, stock - $1) WHERE product_id = $2 AND valor = $3',
           [qty, pId, varName]
         );
       } else {
         await pool.query(
-          'UPDATE products SET stock = stock - $1 WHERE id = $2',
+          'UPDATE products SET stock = GREATEST(0, stock - $1) WHERE id = $2',
           [qty, pId]
         );
       }
@@ -991,6 +992,65 @@ const enviaStateMap = {
   'yucatan': 'YU', 'yucatán': 'YU', 'zacatecas': 'ZA'
 };
 
+const countryIsoMap = {
+  'méxico': 'MX', 'mexico': 'MX',
+  'estados unidos': 'US', 'eeuu': 'US', 'usa': 'US',
+  'canadá': 'CA', 'canada': 'CA',
+  'panamá': 'PA', 'panama': 'PA',
+  'costa rica': 'CR',
+  'guatemala': 'GT',
+  'el salvador': 'SV',
+  'honduras': 'HN',
+  'nicaragua': 'NI',
+  'belice': 'BZ',
+  'república dominicana': 'DO', 'republica dominicana': 'DO',
+  'puerto rico': 'PR',
+  'jamaica': 'JM',
+  'bahamas': 'BS',
+  'trinidad y tobago': 'TT',
+  'barbados': 'BB',
+  'argentina': 'AR',
+  'colombia': 'CO',
+  'chile': 'CL',
+  'perú': 'PE', 'peru': 'PE',
+  'ecuador': 'EC',
+  'brasil': 'BR',
+  'uruguay': 'UY',
+  'paraguay': 'PY',
+  'bolivia': 'BO',
+  'venezuela': 'VE',
+  'españa': 'ES', 'espana': 'ES',
+  'reino unido': 'GB', 'uk': 'GB',
+  'francia': 'FR',
+  'alemania': 'DE',
+  'italia': 'IT',
+  'portugal': 'PT',
+  'países bajos': 'NL', 'paises bajos': 'NL', 'holanda': 'NL',
+  'bélgica': 'BE', 'belgica': 'BE',
+  'suiza': 'CH',
+  'austria': 'AT',
+  'irlanda': 'IE',
+  'suecia': 'SE',
+  'noruega': 'NO',
+  'dinamarca': 'DK',
+  'finlandia': 'FI',
+  'polonia': 'PL',
+  'república checa': 'CZ', 'republica checa': 'CZ',
+  'hungría': 'HU', 'hungria': 'HU',
+  'grecia': 'GR',
+  'rumanía': 'RO', 'rumania': 'RO',
+  'japón': 'JP', 'japon': 'JP',
+  'china': 'CN',
+  'taiwán': 'TW', 'taiwan': 'TW',
+  'australia': 'AU'
+};
+
+const getCountryIsoCode = (countryName) => {
+  if (!countryName) return 'MX';
+  const clean = countryName.toLowerCase().trim();
+  return countryIsoMap[clean] || 'MX';
+};
+
 const getEnviaPayload = async (pedido) => {
   let totalWeight = 0;
   for (const item of (pedido.items || [])) {
@@ -1003,20 +1063,22 @@ const getEnviaPayload = async (pedido) => {
   if (totalWeight < 1) totalWeight = 1;
 
   const stateCode = enviaStateMap[(pedido.estado_env || '').toLowerCase().trim()] || 'JA';
+  const destCountryCode = getCountryIsoCode(pedido.pais);
 
   return {
     origin: {
-      name: 'Amigo Merch', company: 'Amigo Merch', email: 'amigomerchmx@gmail.com', phone: '3312345678',
-      street: 'Bodega Principal', number: '1', district: 'Centro', city: 'Zapopan', state: 'JA', country: 'MX', postalCode: '45200', reference: ''
+      name: 'Merch ALV', company: 'Merch ALV', email: process.env.SMTP_USER || 'develop@dmncrt.com', phone: '5512345678',
+      street: 'Bosques de Tabachines', number: 'Mz 5 Lt 3', district: 'Los Héroes Tecámac II', city: 'Tecámac', state: 'EM', country: 'MX', postalCode: '55764', reference: ''
     },
     destination: {
-      name: pedido.nombre, company: '', email: pedido.correo || 'amigomerchmx@gmail.com', phone: pedido.telefono || '3300000000',
+      name: pedido.nombre, company: '', email: pedido.correo || 'develop@dmncrt.com', phone: pedido.telefono || '5500000000',
       street: pedido.calle || 'Conocida', 
       number: pedido.num_int ? `${pedido.num_ext || "SN"} Int. ${pedido.num_int}` : (pedido.num_ext || 'SN'),
       district: pedido.delegacion ? (pedido.colonia ? `${pedido.colonia}, ${pedido.delegacion}` : pedido.delegacion) : (pedido.colonia || 'Centro'), 
       city: pedido.ciudad || 'Ciudad',
-      state: stateCode, country: pedido.pais === 'Mexico' ? 'MX' : 'MX', postalCode: pedido.cp || '00000', reference: pedido.notas || ''
+      state: stateCode, country: destCountryCode, postalCode: pedido.cp || '00000', reference: pedido.notas || ''
     },
+
     packages: [{
       content: 'Ropa y Accesorios', amount: 1, type: 'box', weight: totalWeight, insurance: 0, declaredValue: parseFloat(pedido.total), weightUnit: 'KG', lengthUnit: 'CM', dimensions: { length: 30, width: 20, height: 10 }
     }],
@@ -1031,7 +1093,8 @@ app.post('/api/pedidos/:id/cotizar-envio', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     const payload = await getEnviaPayload(rows[0]);
-    const enviaApiUrl = process.env.ENVIA_API_URL || 'https://queries.envia.com';
+    const enviaApiUrl = process.env.ENVIA_API_URL || 'https://api.envia.com';
+
     const enviaApiKey = process.env.ENVIA_API_KEY;
     console.log(`[Envia] Usando entorno: ${enviaApiUrl}`);
     const enviaQueriesUrl = enviaApiUrl.includes('api-test') ? 'https://queries-test.envia.com' : 'https://queries.envia.com';
@@ -1436,8 +1499,8 @@ app.post('/api/boletines/:id/enviar', async (req, res) => {
       const results = await Promise.allSettled(
         suscriptores.map(s =>
           mailer.sendMail({
-            from:    `"Amigo Merch" <${process.env.SMTP_USER}>`,
-            replyTo: 'amigomerchmx@gmail.com',
+            from:    `"Merch ALV" <${process.env.SMTP_USER}>`,
+            replyTo: process.env.SMTP_USER || 'develop@dmncrt.com',
             to:      s.correo,
             subject: boletin.asunto,
             html: `
@@ -1445,7 +1508,8 @@ app.post('/api/boletines/:id/enviar', async (req, res) => {
                 ${boletin.html}
                 <hr style="border:none;border-top:1px solid #eee;margin:32px 0;">
                 <p style="color:#aaa;font-size:11px;text-align:center;">
-                  Hola ${s.nombre}, recibiste este correo porque estás suscrito al newsletter de Amigo Merch.<br>
+                  Hola ${s.nombre}, recibiste este correo porque estás suscrito al newsletter de Merch ALV.<br>
+
                   <a href="#" style="color:#aaa;">Cancelar suscripción</a>
                 </p>
               </div>

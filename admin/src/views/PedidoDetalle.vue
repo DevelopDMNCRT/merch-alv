@@ -681,37 +681,38 @@ const fetchPackagePresets = async () => {
 const BODEGAS = [
   {
     id: 1,
-    alias: 'CDMX — San Lucas',
-    nombre: 'Juan Pablo Castillo Cortes',
+    alias: 'EdoMex — Los Héroes Tecámac',
+    nombre: 'Merch ALV',
     company: 'Merch ALV',
-    email: 'contacto@merchalv.mx',
-    phone: '5529556508',
-    street: 'Callejón San Miguel',
-    number: '50',
-    district: 'San Lucas',
-    city: 'Ciudad de México',
-    state: 'CX',
+    email: 'develop@dmncrt.com',
+    phone: '5512345678',
+    street: 'Bosques de Tabachines',
+    number: 'Mz 5 Lt 3',
+    district: 'Los Héroes Tecámac II',
+    city: 'Tecámac',
+    state: 'EM',
     country: 'MX',
-    postalCode: '04030',
+    postalCode: '55764',
     reference: ''
   },
   {
     id: 2,
-    alias: 'Guadalajara — Americana',
-    nombre: 'Paula Franco',
+    alias: 'CDMX — Jardines del Pedregal',
+    nombre: 'Merch ALV',
     company: 'Merch ALV',
-    email: 'contacto@merchalv.mx',
-    phone: '3310762528',
-    street: 'Calle Guadalupe Zuno',
-    number: '1840-2',
-    district: 'Americana',
-    city: 'Guadalajara',
-    state: 'JA',
+    email: 'develop@dmncrt.com',
+    phone: '5512345678',
+    street: 'Fuego',
+    number: '106',
+    district: 'Jardines del Pedregal',
+    city: 'Álvaro Obregón',
+    state: 'CX',
     country: 'MX',
-    postalCode: '44160',
-    reference: 'Dept 2'
+    postalCode: '01900',
+    reference: ''
   }
 ];
+
 
 const selectedBodega = ref(BODEGAS[0]);
 
