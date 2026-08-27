@@ -45,9 +45,24 @@
 
             <!-- Descripción -->
             <div>
-              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción</label>
-              <textarea v-model="form.descripcion" rows="5" placeholder="Describe tu producto..."
-                class="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent p-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 resize-none"></textarea>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción del Producto</label>
+                <div class="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                  <button type="button" @click="applyFormat('bold')" title="Negrita" class="px-2.5 py-1 text-xs font-bold rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-xs hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center gap-1">
+                    <span class="font-black">B</span> Negrita
+                  </button>
+                  <button type="button" @click="applyFormat('italic')" title="Cursiva" class="px-2.5 py-1 text-xs italic font-semibold rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-xs hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center gap-1">
+                    <span class="font-serif italic font-bold">I</span> Cursiva
+                  </button>
+                </div>
+              </div>
+              <div
+                ref="editorRef"
+                contenteditable="true"
+                @input="onEditorInput"
+                @blur="onEditorInput"
+                class="w-full min-h-[130px] max-h-[350px] overflow-y-auto rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent p-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 leading-relaxed whitespace-pre-wrap"
+              ></div>
             </div>
           </div>
 
@@ -109,6 +124,21 @@
                   <input v-model="form.descuento" type="number" min="0" max="100" placeholder="0"
                     class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent pl-3 pr-7 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
                   <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">%</span>
+                </div>
+              </div>
+
+              <!-- Fracción Arancelaria (HS Code) -->
+              <div class="sm:col-span-2 lg:col-span-3">
+                <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Fracción Arancelaria (HS Code / Aduanas)
+                </label>
+                <div class="flex items-center gap-2">
+                  <input v-model="form.hsCode" type="text" placeholder="Ej: 6109.10.01"
+                    class="flex-1 h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-3 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+                  <button type="button" @click="mostrarModalHs = true" class="h-11 px-3.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5 shrink-0 border border-gray-200 dark:border-gray-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    Catálogo
+                  </button>
                 </div>
               </div>
             </div>
@@ -352,16 +382,49 @@
       @done="onEditorDone"
       @cancel="onEditorCancel"
     />
+    
+    <!-- Modal Catálogo HS Code -->
+    <div v-if="mostrarModalHs" class="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 p-4">
+      <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900 space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-bold text-gray-800 dark:text-white">Buscar Fracción Arancelaria (HS Code)</h3>
+          <button @click="mostrarModalHs = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-xl">✕</button>
+        </div>
+        <div class="relative">
+          <input v-model="hsBusqueda" type="text" placeholder="Buscar por palabra clave (ej. playera, sudadera, gorra)..."
+            class="w-full h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-transparent px-4 text-sm text-gray-900 dark:text-white/90 focus:border-brand-500 focus:outline-none" />
+        </div>
+        <div class="max-h-60 overflow-y-auto space-y-2 custom-scrollbar">
+          <div v-for="item in hsFiltrados" :key="item.id" @click="seleccionarHsCode(item)" class="p-3 rounded-xl border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-gray-800 dark:text-white">{{ item.nombre }}</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{{ item.descripcion || 'Descripción aduanal recomendada' }}</p>
+            </div>
+            <span class="text-xs font-mono font-bold bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400 px-2.5 py-1 rounded-lg">
+              Seleccionar
+            </span>
+          </div>
+          <div v-if="hsFiltrados.length === 0" class="py-8 text-center text-xs text-gray-400">
+            No se encontraron elementos en el catálogo aduanal.
+          </div>
+        </div>
+        <div class="flex justify-end pt-2">
+          <button @click="mostrarModalHs = false" class="rounded-xl px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800">Cerrar</button>
+        </div>
+      </div>
+    </div>
   </AdminLayout>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import AdminLayout from '@/components/layout/AdminLayout.vue';
 import ImageEditorModal from '@/components/ui/ImageEditorModal.vue';
 import axios from 'axios';
 import { validateImageFile } from '@/utils/imageValidation';
+
+import descriptionsCatalog from '@/utils/descriptions.json';
 
 const router = useRouter();
 const route = useRoute();
@@ -380,6 +443,7 @@ const form = reactive({
   envioEspecial: '',
   peso: '',
   descuento: 0,
+  hsCode: '6109.10.01',
   esVariable: false,
   esPublico: true,
   
@@ -395,6 +459,32 @@ const form = reactive({
   imagenPreview: null,
   galeria: [],
   galeriaPreview: []
+});
+
+const editorRef = ref(null);
+
+const applyFormat = (cmd) => {
+  if (editorRef.value) {
+    editorRef.value.focus();
+    document.execCommand(cmd, false, null);
+    form.descripcion = editorRef.value.innerHTML;
+  }
+};
+
+const onEditorInput = () => {
+  if (editorRef.value) {
+    form.descripcion = editorRef.value.innerHTML;
+  }
+};
+
+watch(() => form.descripcion, (newVal) => {
+  nextTick(() => {
+    if (editorRef.value && document.activeElement !== editorRef.value) {
+      if (editorRef.value.innerHTML !== (newVal || '')) {
+        editorRef.value.innerHTML = newVal || '';
+      }
+    }
+  });
 });
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -441,6 +531,7 @@ onMounted(async () => {
       form.envioEspecial = data.envio_especial || '';
       form.peso = data.peso || '';
       form.descuento = data.descuento || 0;
+      form.hsCode = data.hs_code || '6109.10.01';
       form.esVariable = data.es_variable;
       form.esPublico = data.es_publico;
       if (data.atributos) {
@@ -707,6 +798,30 @@ const onEditorCancel = () => {
   editorResolve.value = null;
 };
 
+// ── HS Code Modal Logic ──────────────────────────────────────────────────────
+
+const mostrarModalHs = ref(false);
+const hsBusqueda = ref('');
+
+const hsFiltrados = computed(() => {
+  const q = hsBusqueda.value.toLowerCase().trim();
+  if (!q) return descriptionsCatalog.slice(0, 20);
+  return descriptionsCatalog.filter(item => 
+    (item.nombre && item.nombre.toLowerCase().includes(q)) || 
+    (item.descripcion && item.descripcion.toLowerCase().includes(q))
+  ).slice(0, 30);
+});
+
+const seleccionarHsCode = (item) => {
+  form.hsCode = '6109.10.01'; // Default textil o derivado
+  if (item && item.nombre) {
+    if (item.nombre.toLowerCase().includes('sudadera')) form.hsCode = '6110.20.01';
+    else if (item.nombre.toLowerCase().includes('gorra')) form.hsCode = '6505.00.01';
+    else if (item.nombre.toLowerCase().includes('calcetines')) form.hsCode = '6115.95.01';
+  }
+  mostrarModalHs.value = false;
+};
+
 const guardar = async () => {
   if (!form.nombre.trim()) {
     alert('El nombre del producto es requerido');
@@ -736,6 +851,7 @@ const guardar = async () => {
       fd.append('envio_especial', '');
     }
     fd.append('descuento', form.descuento || 0);
+    fd.append('hs_code', form.hsCode || '6109.10.01');
     fd.append('es_variable', form.esVariable ? 'true' : 'false');
     fd.append('es_publico',     form.esPublico ? 'true' : 'false');
     fd.append('slug',           form.slug);

@@ -76,15 +76,27 @@
                 <th class="px-5 py-3 text-left sm:px-6"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Acciones</p></th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-              <tr v-for="p in productosFiltrados" :key="p.id" class="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
-                <!-- Img -->
-                <td class="px-5 py-3 sm:px-6">
-                  <div class="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                    <img v-if="p.imagen_url" :src="p.imagen_url" :alt="p.nombre" class="w-full h-full object-cover" />
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-gray-400"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  </div>
-                </td>
+            <draggable
+              v-model="productosFiltrados"
+              tag="tbody"
+              item-key="id"
+              class="divide-y divide-gray-100 dark:divide-gray-800"
+              @end="onDragEnd"
+              handle=".drag-handle"
+              animation="200"
+            >
+              <template #item="{ element: p }">
+                <tr class="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-transparent">
+                  <!-- Img con drag handle -->
+                  <td class="px-5 py-3 sm:px-6 flex items-center gap-2">
+                    <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    </div>
+                    <div class="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                      <img v-if="p.imagen_url" :src="p.imagen_url" :alt="p.nombre" class="w-full h-full object-cover" />
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-gray-400"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    </div>
+                  </td>
                 <!-- Nombre -->
                 <td class="px-5 py-4 sm:px-6 min-w-[180px]">
                   <p class="font-semibold text-gray-800 text-theme-sm dark:text-white/90">{{ p.nombre }}</p>
@@ -149,15 +161,15 @@
                   </div>
                 </td>
               </tr>
-
-              <tr v-if="productosFiltrados.length === 0 && !loading">
-                <td colspan="7" class="px-5 py-16 text-center">
-                  <svg class="mx-auto mb-3 text-gray-300 dark:text-gray-600" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-                  <p class="text-sm text-gray-400 dark:text-gray-500">No hay productos aún.</p>
-                  <router-link to="/productos/nuevo" class="mt-2 inline-block text-sm text-brand-500 hover:underline">Crear el primero</router-link>
-                </td>
-              </tr>
-            </tbody>
+            </template>
+            <tr v-if="productosFiltrados.length === 0 && !loading">
+              <td colspan="9" class="px-5 py-16 text-center">
+                <svg class="mx-auto mb-3 text-gray-300 dark:text-gray-600" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                <p class="text-sm text-gray-400 dark:text-gray-500">No hay productos aún.</p>
+                <router-link to="/productos/nuevo" class="mt-2 inline-block text-sm text-brand-500 hover:underline">Crear el primero</router-link>
+              </td>
+            </tr>
+          </draggable>
           </table>
         </div>
       </div>
@@ -170,6 +182,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
+import draggable from 'vuedraggable';
 import AdminLayout from '@/components/layout/AdminLayout.vue';
 
 const router = useRouter();
@@ -214,14 +227,31 @@ const conteo = (key) => {
   return lista.filter(p => !p.es_publico).length;
 };
 
-const productosFiltrados = computed(() => {
-  let lista = productos.value;
-  if (filtroTienda.value !== 'todas') lista = lista.filter(p => (p.tienda || 'General') === filtroTienda.value);
-  if (filtroActivo.value === 'publico')   lista = lista.filter(p => p.es_publico);
-  if (filtroActivo.value === 'borrador')  lista = lista.filter(p => !p.es_publico);
-  if (busqueda.value) lista = lista.filter(p => p.nombre.toLowerCase().includes(busqueda.value.toLowerCase()));
-  return lista;
+const productosFiltrados = computed({
+  get: () => {
+    let lista = productos.value;
+    if (filtroTienda.value !== 'todas') lista = lista.filter(p => (p.tienda || 'General') === filtroTienda.value);
+    if (filtroActivo.value === 'publico')   lista = lista.filter(p => p.es_publico);
+    if (filtroActivo.value === 'borrador')  lista = lista.filter(p => !p.es_publico);
+    if (busqueda.value) lista = lista.filter(p => p.nombre.toLowerCase().includes(busqueda.value.toLowerCase()));
+    return lista;
+  },
+  set: (newVal) => {
+    const movedIds = newVal.map(p => p.id);
+    const otherItems = productos.value.filter(p => !movedIds.includes(p.id));
+    productos.value = [...newVal, ...otherItems];
+  }
 });
+
+const onDragEnd = async () => {
+  try {
+    const ids = productosFiltrados.value.map(p => p.id);
+    await axios.put('/api/products/orden', { ids });
+  } catch (err) {
+    console.error('Error saving order', err);
+    alert('Error al guardar el nuevo orden de productos');
+  }
+};
 
 const eliminar = async (p) => {
   if (!confirm(`¿Eliminar "${p.nombre}"? Esta acción no se puede deshacer.`)) return;

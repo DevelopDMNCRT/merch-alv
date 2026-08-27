@@ -1,0 +1,133 @@
+================================================================================
+ INFORME DE ANÁLISIS DE BRECHA Y SINCRONIZACIÓN: AMIGO MERCH vs MERCH ALV
+================================================================================
+Fecha de informe: 27 de Agosto de 2026
+Proyecto Origen (Referencia): Amigo Merch (/Users/yaywiin/Desktop/DEVELOP/amigo-merch)
+Proyecto Destino (A actualizar): Merch ALV (/Users/yaywiin/Desktop/DEVELOP/merch-alv)
+
+--------------------------------------------------------------------------------
+ 1. RESUMEN EJECUTIVO
+--------------------------------------------------------------------------------
+Amigo Merch posee un desarrollo más avanzado que incluye aproximadamente 237+
+líneas de código adicionales en el backend (server/index.js), 3 vistas completas
+nuevas en el cliente, 3 scripts de migración de base de datos PostgreSQL, y varias
+herramientas administrativas (editor WYSIWYG, catálogo de fracciones arancelarias
+HS Code, reordenamiento por Drag & Drop y validaciones antifraude) que aún no
+están presentes o están incompletas en Merch ALV.
+
+--------------------------------------------------------------------------------
+ 2. CATEGORÍA 1: BACKEND Y BASE DE DATOS (server/)
+--------------------------------------------------------------------------------
+
+2.1 DECLARACIÓN ADUANAL INTERNACIONAL (ENVIA.COM)
+    - Amigo Merch: Envía en el payload de cotización/generación (packages[0].items)
+      el desglose detallado de cada producto (descripción aduanal, cantidad, precio,
+      peso, país de origen y fracción arancelaria HS Code), calculando el valor
+      declarado real (declaredValue).
+    - Merch ALV: Solo envía dimensiones y peso bruto del paquete, lo cual provoca
+      que los envíos internacionales sean retenidos en aduana por falta de factura
+      comercial aduanal.
+
+2.2 SISTEMA ANTIFRAUDE Y VERIFICACIÓN DE TOTAL EN MERCADOPAGO
+    - Amigo Merch: Valida en el backend que el monto cobrado en la pasarela coincida
+      con el total real calculado en la base de datos (subtotal + costo de envío
+      dinámico) antes de aprobar la orden, evitando alteración de precios en el cliente.
+    - Merch ALV: Pendiente de sincronización de seguridad.
+
+2.3 ENVÍO DE CORREOS CONDICIONAL
+    - Amigo Merch: Los correos transaccionales de confirmación de pedido solo se
+      envían cuando el webhook de Mercado Pago devuelve un estado "approved".
+    - Merch ALV: Dispara el correo al crear la orden sin validar aprobación final.
+
+2.4 MAPEADOR INTELIGENTE DE ESTADOS INTERNACIONALES
+    - Amigo Merch: Mapea automáticamente nombres de estados/provincias de EE.UU.,
+      Canadá, Europa y Latinoamérica a los códigos ISO requeridos por las paqueterías.
+    - Merch ALV: Mapeo parcial únicamente para México.
+
+2.5 MIGRACIONES DE BASE DE DATOS PENDIENTES EN MERCH ALV:
+    a) reglas_envio.pais -> TEXT: Ampliación de columna para listas largas de países.
+    b) products.orden & tiendas.orden -> INTEGER (DEFAULT 0): Para ordenamiento Drag & Drop.
+    c) pedidos.motivo_fallo -> TEXT: Registro de errores en pagos o generación de guías.
+    d) products.hs_code -> VARCHAR(50): Guardado de fracción arancelaria para aduanas.
+
+--------------------------------------------------------------------------------
+ 3. CATEGORÍA 2: PANEL DE ADMINISTRACIÓN (admin/src)
+--------------------------------------------------------------------------------
+
+3.1 LIBRERÍA DEPENDIENTE: vuedraggable
+    - Amigo Merch: Incluye el paquete `vuedraggable` en admin/package.json para dar
+      soporte al reordenamiento táctil e interactivo de elementos.
+    - Merch ALV: No lo tiene instalado.
+
+3.2 EDITOR VISUAL WYSIWYG DE PRODUCTOS
+    - Amigo Merch: Editor visual de texto enriquecido en ProductoNuevo.vue para dar
+      formato HTML (negritas, viñetas, saltos de línea) a descripciones.
+    - Merch ALV: Textarea básico sin formato.
+
+3.3 CATÁLOGO Y SELECTOR DE FRACCIÓN ARANCELARIA (HS CODE)
+    - Amigo Merch: Selector modal en ProductoNuevo.vue con buscador rápido del
+      catálogo de descripciones aduanales (descriptions.json).
+    - Merch ALV: Inexistente.
+
+3.4 REORDENAMIENTO MANUAL DRAG & DROP
+    - Amigo Merch: Interfaz interactiva en Tiendas.vue y Productos.vue para arrastrar
+      y definir el orden exacto de aparición en el sitio web.
+    - Merch ALV: Muestra elementos ordenados únicamente por ID.
+
+3.5 EDICIÓN DE DESTINO Y REFERENCIA EN COTIZACIÓN (PedidoDetalle.vue)
+    - Amigo Merch: Permite modificar la dirección de entrega o agregar el campo
+      "Referencia" directamente en el modal antes de cotizar o generar la guía.
+    - Merch ALV: Inexistente.
+
+--------------------------------------------------------------------------------
+ 4. CATEGORÍA 3: TIENDA CLIENTE (client/src)
+--------------------------------------------------------------------------------
+
+4.1 VISTAS Y MÓDULOS NUEVOS EN CLIENTE:
+    a) FacturacionView.vue (/facturacion): Formulario público para que los clientes
+       soliciten factura fiscal ingresando su orden, RFC y datos fiscales.
+    b) PagoResultadoView.vue (/pago-resultado): Pantalla post-pago con estados
+       (Éxito, Fallido, Pendiente) y botón de reintento directo.
+    c) MantenimientoView.vue: Pantalla de mantenimiento activable desde el admin.
+
+4.2 INSIGNIAS SVG DE ENVÍO NACIONAL E INTERNACIONAL
+    - Amigo Merch: Banderas e insignias visuales ("Envío Nacional" / "Envío Internacional")
+      en tarjetas de producto y vistas de detalle.
+    - Merch ALV: Inexistente.
+
+4.3 ORDENAMIENTO AUTOMÁTICO DE TALLAS
+    - Amigo Merch: Algoritmo que ordena cronológicamente las tallas en selectores:
+      XS -> S -> M -> L -> XL -> 2XL -> 3XL.
+    - Merch ALV: Orden según inserción en base de datos.
+
+4.4 REGLAS DE EXCEPCIÓN DE ENVÍO GRATIS
+    - Amigo Merch: Lógica de excepción para promociones especiales o productos con
+      envío gratis automático.
+    - Merch ALV: Inexistente.
+
+4.5 METATAGS OPEN GRAPH Y SEO SOCIAL
+    - Amigo Merch: Metatags Open Graph (`og:image`, `og:title`) en `index.html` para
+      previsualización elegante de enlaces en WhatsApp, Facebook y Twitter.
+    - Merch ALV: Metatags estándar.
+
+--------------------------------------------------------------------------------
+ 5. PLAN DE ACCIÓN SUGERIDO PARA LA SINCRONIZACIÓN
+--------------------------------------------------------------------------------
+Para llevar a cabo la actualización de Merch ALV minimizando riesgos, se
+recomienda ejecutar las siguientes 4 Fases:
+
+  FASE 1: Base de Datos y Backend Core
+          (Ejecutar scripts de migración SQL, items aduanales Envia.com,
+           antifraude Mercado Pago y envio condicional de emails).
+
+  FASE 2: Panel de Administración
+          (Instalar vuedraggable, Editor WYSIWYG, catálogo HS Code, Drag & Drop
+           y edición en PedidoDetalle).
+
+  FASE 3: Nuevas Vistas del Cliente
+          (FacturacionView, PagoResultadoView, MantenimientoView).
+
+  FASE 4: UI/UX & Polish
+          (Insignias de envío SVG, ordenamiento de tallas, SEO social y prueba end-to-end).
+
+================================================================================

@@ -1,10 +1,10 @@
-export interface CountryItem {
+export interface Country {
   name: string;
   code: string;
   continent: string;
 }
 
-export const COUNTRIES_CATALOG: CountryItem[] = [
+export const COUNTRIES_CATALOG: Country[] = [
   // América del Norte
   { name: 'México', code: 'MX', continent: 'América del Norte' },
   { name: 'Estados Unidos', code: 'US', continent: 'América del Norte' },
@@ -74,14 +74,18 @@ export const CONTINENTS_LIST = [
   'Asia y Oceanía'
 ];
 
-export const getCountriesGroupedByContinent = () => {
-  return CONTINENTS_LIST.map(continent => ({
-    continent,
-    countries: COUNTRIES_CATALOG.filter(c => c.continent === continent)
-  }));
+export const getCountriesByContinent = (continentName: string): Country[] => {
+  if (!continentName || continentName === 'Todos') return COUNTRIES_CATALOG;
+  return COUNTRIES_CATALOG.filter(c => c.continent === continentName);
 };
 
-export const getCountriesByContinent = (continentName?: string) => {
-  if (!continentName) return COUNTRIES_CATALOG;
-  return COUNTRIES_CATALOG.filter(c => c.continent === continentName);
+export const getCountryIsoCode = (countryName: string): string => {
+  if (!countryName) return 'MX';
+  const clean = countryName.toLowerCase().trim();
+  const match = COUNTRIES_CATALOG.find(c =>
+    c.name.toLowerCase().trim() === clean ||
+    c.code.toLowerCase() === clean ||
+    (clean === 'mexico' && c.code === 'MX')
+  );
+  return match ? match.code : 'MX';
 };

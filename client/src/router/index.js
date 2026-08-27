@@ -43,6 +43,21 @@ const router = createRouter({
       path: '/contacto',
       name: 'contacto',
       component: () => import('../views/ContactoView.vue')
+    },
+    {
+      path: '/facturacion',
+      name: 'facturacion',
+      component: () => import('../views/FacturacionView.vue')
+    },
+    {
+      path: '/pago-resultado',
+      name: 'pago-resultado',
+      component: () => import('../views/PagoResultadoView.vue')
+    },
+    {
+      path: '/mantenimiento',
+      name: 'mantenimiento',
+      component: () => import('../views/MantenimientoView.vue')
     }
   ]
 })
