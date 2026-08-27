@@ -163,6 +163,15 @@
               <p v-else class="text-sm text-gray-400 dark:text-gray-500 italic">Sin notas.</p>
             </div>
 
+            <!-- Motivo de Fallo (solo visible cuando el estado es Fallido) -->
+            <div v-if="pedido.estado === 'Fallido' && pedido.motivo_fallo">
+              <p class="text-xs font-medium text-error-500 dark:text-error-400 uppercase mb-1.5 block">Motivo de Rechazo (Mercado Pago)</p>
+              <div class="w-full rounded-lg border border-error-200 dark:border-error-500/30 bg-error-50 dark:bg-error-500/10 px-4 py-3 text-sm text-error-800 dark:text-error-300 leading-relaxed flex items-start gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <code class="font-mono text-xs">{{ pedido.motivo_fallo }}</code>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -303,12 +312,7 @@
                       <div>
                         <label class="text-[11px] text-gray-400 mb-0.5 block">País</label>
                         <select v-model="destEdit.pais" @change="onPaisChange" class="w-full h-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-2 text-xs text-gray-800 dark:text-white/90 focus:border-[#00B4AA] focus:outline-none">
-                          <option value="México">México</option>
-                          <option value="Estados Unidos">Estados Unidos</option>
-                          <option value="Argentina">Argentina</option>
-                          <option value="Colombia">Colombia</option>
-                          <option value="Panamá">Panamá</option>
-                          <option value="España">España</option>
+                          <option v-for="c in COUNTRIES_CATALOG" :key="c.code" :value="c.name">{{ c.name }}</option>
                         </select>
                       </div>
                       <div>
@@ -414,6 +418,111 @@
                   </div>
                 </div>
                 <p class="text-[11px] text-gray-400 mt-2">{{ pkgDims.length }}×{{ pkgDims.width }}×{{ pkgDims.height }} cm · {{ pkgPeso }} kg</p>
+              </div>
+            </div>
+
+            <!-- ── Sección 1.5: Factura Comercial Aduanal (Solo Envíos Internacionales) ── -->
+            <div v-if="esEnvioInternacional" class="p-5 border-t border-gray-100 dark:border-gray-800 bg-blue-50/40 dark:bg-blue-900/10 space-y-4">
+              <div class="flex items-center gap-2">
+                <span class="text-lg">🌐</span>
+                <div>
+                  <h3 class="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider">Factura Comercial Aduanal (Envío Internacional)</h3>
+                  <p class="text-[11px] text-gray-500 dark:text-gray-400">Requerido por aduanas y paqueterías internacionales para exportación.</p>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label class="text-gray-500 dark:text-gray-400 mb-1 block font-medium">RFC / Tax ID Origen (Exportador)</label>
+                  <input v-model="customsData.exporterCode" type="text" placeholder="XAXX010101000" class="w-full h-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 text-xs text-gray-800 dark:text-white focus:border-[#00B4AA] focus:outline-none" />
+                </div>
+                <div>
+                  <label class="text-gray-500 dark:text-gray-400 mb-1 block font-medium">Tax ID Destino (Importador - Opcional)</label>
+                  <input v-model="customsData.importerCode" type="text" placeholder="Tax ID / NIF" class="w-full h-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 text-xs text-gray-800 dark:text-white focus:border-[#00B4AA] focus:outline-none" />
+                </div>
+                <div>
+                  <label class="text-gray-500 dark:text-gray-400 mb-1 block font-medium">Razón de Exportación</label>
+                  <select v-model="customsData.exportReason" class="w-full h-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 text-xs text-gray-800 dark:text-white focus:border-[#00B4AA] focus:outline-none">
+                    <option value="SALE">Venta (Commercial Sale)</option>
+                    <option value="GIFT">Regalo (Gift)</option>
+                    <option value="SAMPLE">Muestra (Sample)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-gray-500 dark:text-gray-400 mb-1 block font-medium">Pago de Aranceles e Impuestos</label>
+                  <select v-model="customsData.dutiesPayer" class="w-full h-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 text-xs text-gray-800 dark:text-white focus:border-[#00B4AA] focus:outline-none">
+                    <option value="RECIPIENT">Destinatario paga en la entrega (DDU / DAP)</option>
+                    <option value="SENDER">Remitente paga (DDP)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Artículos Aduanales -->
+              <div class="space-y-3 pt-2">
+                <p class="text-[11px] font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Artículos para declaración aduanal</p>
+                <div v-for="(item, idx) in customsData.contents" :key="idx" class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-2 text-xs">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label class="text-[10px] text-gray-400 mb-0.5 block font-medium">Descripción en Inglés (min 15 caracteres) *</label>
+                      <input v-model="item.description" type="text" placeholder="Cotton T-Shirt apparel for adults" class="w-full h-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-2.5 text-xs text-gray-800 dark:text-white focus:border-[#00B4AA] focus:outline-none" />
+                    </div>
+                    <div>
+                      <div class="flex items-center justify-between mb-0.5">
+                        <label class="text-[10px] text-gray-400 font-medium">Código HS (Harmonized System Code) *</label>
+                        <span v-if="getHsInfo(item.hsCode, item.customHsCode, item.description).confidence"
+                          class="text-[10px] px-1.5 py-0.5 rounded"
+                          :class="getHsInfo(item.hsCode, item.customHsCode, item.description).badgeClass"
+                        >
+                          {{ getHsInfo(item.hsCode, item.customHsCode, item.description).confidence }}
+                        </span>
+                      </div>
+                      
+                      <div class="space-y-1.5">
+                        <select v-model="item.hsCode" @change="onHsCodeChange(item)" class="w-full h-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 text-xs text-gray-800 dark:text-white focus:border-[#00B4AA] focus:outline-none font-medium cursor-pointer">
+                          <option v-for="h in HS_CODES_CATALOG" :key="h.code" :value="h.code">
+                            {{ h.title }}
+                          </option>
+                        </select>
+
+                        <!-- Input manual si se elige código personalizado o un código no registrado -->
+                        <input v-if="item.hsCode === 'CUSTOM' || !HS_CODES_CATALOG.some(h => h.code === item.hsCode)"
+                          v-model="item.customHsCode"
+                          type="text"
+                          placeholder="Ej: 6109.10.0011"
+                          class="w-full h-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-2.5 text-xs font-mono text-gray-800 dark:text-white focus:border-[#00B4AA] focus:outline-none"
+                        />
+
+                        <!-- Tarjeta Informativa Aduanal (Estilo Envia.com) -->
+                        <div v-if="getHsInfo(item.hsCode, item.customHsCode)" class="p-2 rounded-lg border border-gray-100 dark:border-gray-700/60 bg-gray-50/80 dark:bg-gray-900/50 text-[11px] space-y-0.5">
+                          <div class="flex items-center justify-between font-bold text-gray-800 dark:text-gray-200 font-mono text-[11px]">
+                            <span>{{ item.hsCode === 'CUSTOM' ? (item.customHsCode || 'Código Personalizado') : item.hsCode }}</span>
+                          </div>
+                          <p class="text-gray-500 dark:text-gray-400 italic leading-snug text-[10px]">
+                            {{ getHsInfo(item.hsCode, item.customHsCode).description }}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-3 gap-2">
+                    <div>
+                      <label class="text-[10px] text-gray-400 mb-0.5 block">Hecho en</label>
+                      <select v-model="item.countryOfOrigin" class="w-full h-7 rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 text-xs text-gray-800 dark:text-white focus:border-[#00B4AA] focus:outline-none">
+                        <option value="MX">México (MX)</option>
+                        <option value="US">Estados Unidos (US)</option>
+                        <option value="CN">China (CN)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="text-[10px] text-gray-400 mb-0.5 block">Precio Unit. (MXN)</label>
+                      <input v-model.number="item.price" type="number" min="0" class="w-full h-7 rounded border border-gray-200 dark:border-gray-700 bg-transparent px-2 text-xs text-gray-800 dark:text-white focus:border-[#00B4AA] focus:outline-none" />
+                    </div>
+                    <div>
+                      <label class="text-[10px] text-gray-400 mb-0.5 block">Cantidad</label>
+                      <input v-model.number="item.quantity" type="number" min="1" class="w-full h-7 rounded border border-gray-200 dark:border-gray-700 bg-transparent px-2 text-xs text-gray-800 dark:text-white focus:border-[#00B4AA] focus:outline-none" />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -618,6 +727,7 @@
 import { computed, ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import AdminLayout from '@/components/layout/AdminLayout.vue';
+import { COUNTRIES_CATALOG } from '@/utils/countriesCatalog';
 
 const statesData = {
   'México': ['Aguascalientes', 'Baja California', 'Baja California Sur', 'Campeche', 'CDMX', 'Chiapas', 'Chihuahua', 'Coahuila', 'Colima', 'Durango', 'Estado de México', 'Guanajuato', 'Guerrero', 'Hidalgo', 'Jalisco', 'Michoacán', 'Morelos', 'Nayarit', 'Nuevo León', 'Oaxaca', 'Puebla', 'Querétaro', 'Quintana Roo', 'San Luis Potosí', 'Sinaloa', 'Sonora', 'Tabasco', 'Tamaulipas', 'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas'],
@@ -647,6 +757,160 @@ const destEdit = ref({
   colonia: '', ciudad: '', delegacion: '', estado: '', pais: 'México', cp: '',
   correo: '', referencia: ''
 });
+
+const esEnvioInternacional = computed(() => {
+  const p = (destEdit.value.pais || '').trim().toLowerCase();
+  return p !== '' && p !== 'méxico' && p !== 'mexico';
+});
+
+const customsData = ref({
+  exportReason: 'SALE',
+  exporterCode: 'XAXX010101000',
+  importerCode: '',
+  dutiesPayer: 'RECIPIENT',
+  contents: []
+});
+
+const HS_CODES_CATALOG = [
+  {
+    code: '6109.10',
+    title: '6109.10 — Playeras y camisetas 100% Algodón (Cotton T-Shirts)',
+    confidence: 'Categoría Oficial Verificada',
+    suggestedDesc: 'Cotton apparel t-shirt for adults',
+    description: 'Articles of apparel: T-shirts, singlets and other vests, knitted or crocheted. Of cotton. Men\'s, women\'s or boys\' apparel.'
+  },
+  {
+    code: '6109.90',
+    title: '6109.90 — Playeras y tops sintéticos / mezclas (Synthetic T-Shirts)',
+    confidence: 'Categoría Oficial Verificada',
+    suggestedDesc: 'Synthetic apparel t-shirt for adults',
+    description: 'Articles of apparel: T-shirts, singlets and other vests, knitted or crocheted. Of other textile materials (polyester, blends).'
+  },
+  {
+    code: '6110.20',
+    title: '6110.20 — Sudaderas, hoodies y suéteres de algodón (Cotton Hoodies)',
+    confidence: 'Categoría Oficial Verificada',
+    suggestedDesc: 'Cotton hoodie sweatshirt apparel for adults',
+    description: 'Jerseys, pullovers, cardigans, waistcoats and similar articles, knitted or crocheted. Of cotton.'
+  },
+  {
+    code: '6110.30',
+    title: '6110.30 — Sudaderas y hoodies sintéticas / fleece (Synthetic Hoodies)',
+    confidence: 'Categoría Oficial Verificada',
+    suggestedDesc: 'Synthetic fleece hoodie apparel for adults',
+    description: 'Jerseys, pullovers, cardigans, waistcoats and similar articles, knitted or crocheted. Of man-made fibres.'
+  },
+  {
+    code: '6505.00',
+    title: '6505.00 — Gorras, sombreros, bonetes y tocados (Hats, Caps & Headwear)',
+    confidence: 'Categoría Oficial Verificada',
+    suggestedDesc: 'Casual textile headwear cap for adults',
+    description: 'Hats and other headgear, knitted or crocheted, or made up from lace, felt or other textile fabric.'
+  },
+  {
+    code: '8523.49',
+    title: '8523.49 — Vinilos, CDs y soportes de audio (Vinyl Records & Music CDs)',
+    confidence: 'Categoría Oficial Verificada',
+    suggestedDesc: 'Audio music album record sound disc',
+    description: 'Discs, tapes, solid-state non-volatile storage devices, smart cards and other media for the recording of sound.'
+  },
+  {
+    code: '4202.92',
+    title: '4202.92 — Mochilas, bolsas de tela, tote bags (Backpacks & Bags)',
+    confidence: 'Categoría Oficial Verificada',
+    suggestedDesc: 'Textile tote bag backpack container',
+    description: 'Trunks, suit-cases, vanity-cases, executive-cases, brief-cases, school satchels and similar containers. Outer surface of plastic sheeting or textile materials.'
+  },
+  {
+    code: '4911.99',
+    title: '4911.99 — Posters, stickers, calcomanías (Posters, Stickers & Prints)',
+    confidence: 'Categoría Oficial Verificada',
+    suggestedDesc: 'Printed poster sticker paper art print',
+    description: 'Other printed matter, including printed pictures and photographs.'
+  },
+  {
+    code: 'CUSTOM',
+    title: '✏️ Otro código HS personalizado (Ingresar manualmente)',
+    confidence: 'Código Personalizado',
+    suggestedDesc: 'Custom product item apparel',
+    description: 'Permite ingresar cualquier otro código numérico arancelario de 6 a 10 dígitos.'
+  }
+];
+
+const getHsInfo = (code, customCode, description = '') => {
+  const len = (description || '').trim().length;
+  let confidenceLabel = '';
+  let badgeClass = '';
+
+  if (len < 15) {
+    confidenceLabel = 'Descripción incompleta (mín. 15 caracteres)';
+    badgeClass = 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 font-semibold';
+  } else if (len <= 22) {
+    confidenceLabel = 'Nivel de confianza medio';
+    badgeClass = 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 font-semibold';
+  } else {
+    confidenceLabel = 'Nivel de confianza alto';
+    badgeClass = 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 font-semibold';
+  }
+
+  if (code === 'CUSTOM') {
+    return {
+      code: customCode || 'Personalizado',
+      title: `${customCode || 'Personalizado'} — Código HS`,
+      confidence: len < 15 ? 'Descripción incompleta (mín. 15 caracteres)' : (len <= 22 ? 'Código Personalizado (Confianza Media)' : 'Código Personalizado Válido'),
+      badgeClass: badgeClass,
+      description: 'Código arancelario del Sistema Armonizado ingresado manualmente.'
+    };
+  }
+
+  const match = HS_CODES_CATALOG.find(h => h.code === code);
+  if (match) {
+    return {
+      ...match,
+      confidence: confidenceLabel,
+      badgeClass: badgeClass
+    };
+  }
+
+  return {
+    code: code || '6109.10',
+    title: `${code || '6109.10'} — Código HS`,
+    confidence: confidenceLabel,
+    badgeClass: badgeClass,
+    description: 'Código arancelario armonizado del Sistema Armonizado (Harmonized System Code).'
+  };
+};
+
+const onHsCodeChange = (item) => {
+  const match = HS_CODES_CATALOG.find(h => h.code === item.hsCode);
+  if (!match || !match.suggestedDesc) return;
+  const raw = (item.rawName || '').trim();
+  if (raw) {
+    let combined = `${raw} - ${match.suggestedDesc}`;
+    if (combined.length < 15) combined += ' for adults';
+    item.description = combined;
+  } else {
+    item.description = match.suggestedDesc;
+  }
+};
+
+const formatCustomsPayload = () => {
+  if (!esEnvioInternacional.value) return null;
+  const raw = customsData.value;
+  return {
+    ...raw,
+    contents: (raw.contents || []).map(c => {
+      const finalHs = (c.hsCode === 'CUSTOM' ? (c.customHsCode || '6109.10') : c.hsCode) || '6109.10';
+      return {
+        description: c.description,
+        hsCode: finalHs,
+        countryOfOrigin: c.countryOfOrigin || 'MX',
+        price: parseFloat(c.price || 10),
+        quantity: parseInt(c.quantity || 1)
+      };
+    })
+  };
+};
 
 const currentStates = computed(() => statesData[destEdit.value.pais] || []);
 const onPaisChange = () => {
@@ -681,38 +945,37 @@ const fetchPackagePresets = async () => {
 const BODEGAS = [
   {
     id: 1,
-    alias: 'EdoMex — Los Héroes Tecámac',
-    nombre: 'Merch ALV',
+    alias: 'CDMX — San Lucas',
+    nombre: 'Juan Pablo Castillo Cortes',
     company: 'Merch ALV',
-    email: 'develop@dmncrt.com',
-    phone: '5512345678',
-    street: 'Bosques de Tabachines',
-    number: 'Mz 5 Lt 3',
-    district: 'Los Héroes Tecámac II',
-    city: 'Tecámac',
-    state: 'EM',
+    email: 'contacto@merchalv.mx',
+    phone: '5529556508',
+    street: 'Callejón San Miguel',
+    number: '50',
+    district: 'San Lucas',
+    city: 'Ciudad de México',
+    state: 'CX',
     country: 'MX',
-    postalCode: '55764',
+    postalCode: '04030',
     reference: ''
   },
   {
     id: 2,
-    alias: 'CDMX — Jardines del Pedregal',
-    nombre: 'Merch ALV',
+    alias: 'Guadalajara — Americana',
+    nombre: 'Paula Franco',
     company: 'Merch ALV',
-    email: 'develop@dmncrt.com',
-    phone: '5512345678',
-    street: 'Fuego',
-    number: '106',
-    district: 'Jardines del Pedregal',
-    city: 'Álvaro Obregón',
-    state: 'CX',
+    email: 'contacto@merchalv.mx',
+    phone: '3310762528',
+    street: 'Calle Guadalupe Zuno',
+    number: '1840-2',
+    district: 'Americana',
+    city: 'Guadalajara',
+    state: 'JA',
     country: 'MX',
-    postalCode: '01900',
-    reference: ''
+    postalCode: '44160',
+    reference: 'Dept 2'
   }
 ];
-
 
 const selectedBodega = ref(BODEGAS[0]);
 
@@ -794,6 +1057,7 @@ const fetchPedido = async () => {
       total: parseFloat(data.total),
       tracking_number: data.tracking_number,
       guia_url: data.guia_url,
+      motivo_fallo: data.motivo_fallo || null,
       // Campos de dirección individuales
       calle: data.calle, num_ext: data.num_ext, colonia: data.colonia,
       cp: data.cp, estado_env: data.estado_env, pais: data.pais
@@ -814,6 +1078,8 @@ const fetchPedido = async () => {
       correo:     data.correo     || '',
       referencia: data.notas      || ''
     };
+    // Inicializar datos aduanales para envíos internacionales
+    initCustomsData(data.items, data.total);
     // Inicializar el estado pendiente con el valor guardado en BD
     estadoPendiente.value = data.estado;
   } catch (error) {
@@ -821,6 +1087,47 @@ const fetchPedido = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+const initCustomsData = (items, total) => {
+  const contents = (items || []).map(item => {
+    const rawName = item.nombre || 'Product';
+    let hs = '6109.10';
+    const lower = rawName.toLowerCase();
+    if (lower.includes('cd') || lower.includes('disco') || lower.includes('album')) hs = '8523.49';
+    if (lower.includes('gorra') || lower.includes('cap') || lower.includes('beanie')) hs = '6505.00';
+    if (lower.includes('sudadera') || lower.includes('hoodie') || lower.includes('sueter')) hs = '6110.20';
+    if (lower.includes('mochila') || lower.includes('bag') || lower.includes('tote')) hs = '4202.92';
+    if (lower.includes('sticker') || lower.includes('poster')) hs = '4911.99';
+
+    const info = HS_CODES_CATALOG.find(h => h.code === hs) || HS_CODES_CATALOG[0];
+    let desc = `${rawName} - ${info.suggestedDesc}`;
+    if (desc.length < 15) desc = `${rawName} - Cotton apparel for adults`;
+
+    return {
+      rawName: rawName,
+      description: desc,
+      hsCode: hs,
+      customHsCode: '',
+      countryOfOrigin: 'MX',
+      price: parseFloat(item.precio || item.price || 10),
+      quantity: parseInt(item.cantidad || 1)
+    };
+  });
+
+  if (!contents.length) {
+    contents.push({
+      rawName: 'Cotton T-Shirt',
+      description: 'Cotton T-Shirt apparel for adults',
+      hsCode: '6109.10',
+      customHsCode: '',
+      countryOfOrigin: 'MX',
+      price: parseFloat(total || 100),
+      quantity: 1
+    });
+  }
+
+  customsData.value.contents = contents;
 };
 
 onMounted(() => {
@@ -873,7 +1180,8 @@ const cotizarEnvio = async () => {
         dims: pkgDims.value,
         origen: selectedBodega.value,
         type: pkgType.value,
-        destino: destEdit.value
+        destino: destEdit.value,
+        customs: formatCustomsPayload()
       })
     });
     const data = await res.json();
@@ -894,7 +1202,7 @@ const cotizarEnvio = async () => {
       rates.value = filtered.sort((a, b) => a.totalPrice - b.totalPrice);
       showToast('success', `${filtered.length} opciones encontradas.`);
     } else {
-      showToast('error', 'No se encontraron tarifas para este código postal.');
+      showToast('error', data.error || 'No se encontraron tarifas para este código postal.');
     }
   } catch (err) {
     console.error(err);
@@ -915,7 +1223,8 @@ const generarGuia = async () => {
       dims: pkgDims.value,
       origen: selectedBodega.value,
       type: pkgType.value,
-      destino: destEdit.value
+      destino: destEdit.value,
+      customs: formatCustomsPayload()
     };
     const res = await fetch(`/api/pedidos/${pedido.value.id}/generar-guia`, {
       method: 'POST',

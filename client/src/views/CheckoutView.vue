@@ -147,7 +147,15 @@
               <span>{{ formatPrice(cartGetters.totalPrice.value) }}</span>
             </div>
             <div class="total-row">
-              <span>{{ t('checkout.shipping') }}</span>
+              <span class="flex items-center gap-1.5">
+                {{ t('checkout.shipping') }}
+                <span v-if="form.pais === 'México'" class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800">
+                  🇲🇽 Nacional
+                </span>
+                <span v-else-if="form.pais" class="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800">
+                  ✈️ {{ form.pais }}
+                </span>
+              </span>
               <span v-if="isShippingSupported">{{ formatPrice(costoEnvio) }}</span>
               <span v-else class="text-red-500 font-bold">No disponible</span>
             </div>
@@ -460,6 +468,18 @@ let mpSDKInstance = null;
 let mpPublicKey = '';
 let cardBrickController = null;
 
+// Mapa de códigos de rechazo de MP a mensajes amigables para el cliente
+const MP_ERROR_MESSAGES = {
+  cc_rejected_high_risk: 'Tu banco rechazó el pago por seguridad. Llama a tu banco, autoriza compras internacionales e intenta de nuevo.',
+  cc_rejected_call_for_authorize: 'Tu banco requiere que autorices esta compra. Llama al número en la parte posterior de tu tarjeta e intenta de nuevo.',
+  cc_rejected_insufficient_amount: 'Fondos insuficientes. Verifica el saldo de tu tarjeta e intenta con otra.',
+  cc_rejected_bad_filled_card_number: 'El número de tarjeta es incorrecto. Verifica y vuelve a intentarlo.',
+  cc_rejected_bad_filled_date: 'La fecha de vencimiento es incorrecta. Verifica y vuelve a intentarlo.',
+  cc_rejected_bad_filled_security_code: 'El código de seguridad (CVV) es incorrecto. Verifica y vuelve a intentarlo.',
+  cc_rejected_card_disabled: 'Tu tarjeta está deshabilitada. Contacta a tu banco para activarla.',
+  cc_rejected_duplicated_payment: 'Este pago ya fue procesado. Revisa tu correo antes de volver a intentarlo.',
+};
+
 const renderMercadoPagoBrick = async () => {
   if (!mpSDKInstance || !mpPublicKey) return;
 
@@ -579,15 +599,23 @@ const renderMercadoPagoBrick = async () => {
 
           if (!res.ok) {
             const errData = await res.json();
-            throw new Error(errData.error || 'Error al procesar el pago');
+            const errorObj = new Error(errData.error || 'Error al procesar el pago');
+            errorObj.status_detail = errData.status_detail;
+            throw errorObj;
           }
 
           alert('¡Pedido confirmado exitosamente!');
           cartActions.clearCart();
-          router.push('/');
+          router.push('/pago-resultado');
         } catch (error) {
           console.error('Error al procesar pago Mercado Pago:', error);
-          alert(`Hubo un problema al procesar el pago: ${error.message}`);
+          const statusDetail = error?.status_detail || error?.message || '';
+          const friendlyMsg = MP_ERROR_MESSAGES[statusDetail];
+          if (friendlyMsg) {
+            alert(`⚠️ Pago rechazado\n\n${friendlyMsg}`);
+          } else {
+            alert(`Hubo un problema al procesar el pago: ${error.message}`);
+          }
         } finally {
           loading.value = false;
         }

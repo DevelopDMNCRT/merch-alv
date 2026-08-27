@@ -79,3 +79,4 @@ export const getCountriesByContinent = (continentName) => {
   if (!continentName) return COUNTRIES_CATALOG;
   return COUNTRIES_CATALOG.filter(c => c.continent === continentName);
 };
+

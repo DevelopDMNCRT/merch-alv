@@ -1,6 +1,12 @@
 require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
+
+// Auto-ejecución de migración de columna pais a TEXT al iniciar
+pool.query('ALTER TABLE reglas_envio ALTER COLUMN pais TYPE TEXT;').catch(e => console.error('[DB Sync]', e.message));
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -227,11 +233,7 @@ app.use((req, res, next) => {
 });
 
 
-// Database Connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+
 
 // --- Auth Routes ---
 
@@ -357,7 +359,7 @@ app.get('/api/products', async (req, res) => {
       query += ` AND p.es_publico = true`;
     }
     
-    query += ` ORDER BY p.created_at DESC`;
+    query += ` ORDER BY p.orden ASC, p.created_at DESC`;
 
     const result = await pool.query(query);
     
@@ -371,6 +373,27 @@ app.get('/api/products', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+// Update order of products
+app.put('/api/products/orden', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).json({ error: 'Invalid input' });
+    await client.query('BEGIN');
+    for (let i = 0; i < ids.length; i++) {
+      await client.query('UPDATE products SET orden = $1 WHERE id = $2', [i, ids[i]]);
+    }
+    await client.query('COMMIT');
+    res.json({ message: 'Orden actualizado' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update order' });
+  } finally {
+    client.release();
   }
 });
 
@@ -392,7 +415,7 @@ app.get('/api/products/:id', async (req, res) => {
 
 // POST create product
 app.post('/api/products', upload.any(), async (req, res) => {
-  const { nombre, descripcion, precio, stock, envio_especial, es_variable, es_publico, slug, atributos, variaciones, tienda, flag, preventa_inicio, preventa_fin, peso, descuento } = req.body;
+  const { nombre, descripcion, precio, stock, envio_especial, es_variable, es_publico, slug, atributos, variaciones, tienda, flag, preventa_inicio, preventa_fin, peso, descuento, hs_code } = req.body;
 
   if (!nombre) return res.status(400).json({ error: 'El nombre es requerido' });
 
@@ -416,8 +439,8 @@ app.post('/api/products', upload.any(), async (req, res) => {
       .replace(/\s+/g, '-');
 
     const result = await client.query(
-      `INSERT INTO products (nombre, descripcion, precio, stock, envio_especial, es_variable, es_publico, slug, imagen_url, galeria_urls, atributos, tienda, flag, preventa_inicio, preventa_fin, peso, descuento)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+      `INSERT INTO products (nombre, descripcion, precio, stock, envio_especial, es_variable, es_publico, slug, imagen_url, galeria_urls, atributos, tienda, flag, preventa_inicio, preventa_fin, peso, descuento, hs_code)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [
         nombre, descripcion || null,
         precio ? parseFloat(precio) : null,
@@ -429,7 +452,8 @@ app.post('/api/products', upload.any(), async (req, res) => {
         (flag === 'Preventa' && preventa_inicio) ? preventa_inicio : null,
         (flag === 'Preventa' && preventa_fin)    ? preventa_fin    : null,
         peso ? parseFloat(peso) : 0,
-        descuento ? parseInt(descuento) : 0
+        descuento ? parseInt(descuento) : 0,
+        hs_code || null
       ]
     );
 
@@ -463,7 +487,7 @@ app.post('/api/products', upload.any(), async (req, res) => {
 // PUT update product
 app.put('/api/products/:id', upload.any(), async (req, res) => {
   const { id } = req.params;
-  const { nombre, descripcion, precio, stock, envio_especial, es_variable, es_publico, slug, atributos, variaciones, tienda, flag, preventa_inicio, preventa_fin, peso, descuento } = req.body;
+  const { nombre, descripcion, precio, stock, envio_especial, es_variable, es_publico, slug, atributos, variaciones, tienda, flag, preventa_inicio, preventa_fin, peso, descuento, hs_code } = req.body;
 
   if (!nombre) return res.status(400).json({ error: 'El nombre es requerido' });
 
@@ -499,7 +523,7 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
     if (newGaleria.length) galeria_urls = [...galeria_urls, ...newGaleria.map(f => f.path)];
 
     const result = await client.query(
-      `UPDATE products SET nombre=$1, descripcion=$2, precio=$3, stock=$4, envio_especial=$5, es_variable=$6, es_publico=$7, slug=$8, imagen_url=$9, galeria_urls=$10, atributos=$11, tienda=$13, flag=$14, preventa_inicio=$15, preventa_fin=$16, peso=$17, descuento=$18
+      `UPDATE products SET nombre=$1, descripcion=$2, precio=$3, stock=$4, envio_especial=$5, es_variable=$6, es_publico=$7, slug=$8, imagen_url=$9, galeria_urls=$10, atributos=$11, tienda=$13, flag=$14, preventa_inicio=$15, preventa_fin=$16, peso=$17, descuento=$18, hs_code=$19
        WHERE id=$12 RETURNING *`,
       [
         nombre, descripcion || null,
@@ -512,7 +536,8 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
         (flag === 'Preventa' && preventa_inicio) ? preventa_inicio : null,
         (flag === 'Preventa' && preventa_fin)    ? preventa_fin    : null,
         peso ? parseFloat(peso) : 0,
-        descuento ? parseInt(descuento) : 0
+        descuento ? parseInt(descuento) : 0,
+        hs_code || null
       ]
     );
 
@@ -754,11 +779,32 @@ app.get('/', (_req, res) => res.json({ message: 'Merch ALV API is running' }));
 // GET all tiendas
 app.get('/api/tiendas', async (_req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM tiendas WHERE deleted_at IS NULL ORDER BY nombre ASC');
+    const result = await pool.query('SELECT * FROM tiendas WHERE deleted_at IS NULL ORDER BY orden ASC, id DESC');
     res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch tiendas' });
+  }
+});
+
+// Update order of tiendas
+app.put('/api/tiendas/orden', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).json({ error: 'Invalid input' });
+    await client.query('BEGIN');
+    for (let i = 0; i < ids.length; i++) {
+      await client.query('UPDATE tiendas SET orden = $1 WHERE id = $2', [i, ids[i]]);
+    }
+    await client.query('COMMIT');
+    res.json({ message: 'Orden actualizado' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update order' });
+  } finally {
+    client.release();
   }
 });
 
@@ -1051,6 +1097,23 @@ const getCountryIsoCode = (countryName) => {
   return countryIsoMap[clean] || 'MX';
 };
 
+const getStateCode = (stateName, countryCode) => {
+  if (!stateName) return 'JA';
+  const clean = stateName.trim();
+  if (countryCode === 'MX') {
+    return enviaStateMap[clean.toLowerCase()] || 'JA';
+  }
+  if (clean.length <= 3) {
+    return clean.toUpperCase();
+  }
+  const intlStateMap = {
+    'ontario': 'ON', 'quebec': 'QC', 'british columbia': 'BC', 'alberta': 'AB', 'manitoba': 'MB', 'saskatchewan': 'SK', 'nova scotia': 'NS', 'new brunswick': 'NB',
+    'california': 'CA', 'texas': 'TX', 'florida': 'FL', 'new york': 'NY', 'illinois': 'IL', 'pennsylvania': 'PA', 'ohio': 'OH', 'georgia': 'GA', 'north carolina': 'NC', 'michigan': 'MI',
+    'madrid': 'M', 'barcelona': 'B', 'valencia': 'V', 'sevilla': 'SE'
+  };
+  return intlStateMap[clean.toLowerCase()] || clean.substring(0, 2).toUpperCase();
+};
+
 const getEnviaPayload = async (pedido) => {
   let totalWeight = 0;
   for (const item of (pedido.items || [])) {
@@ -1062,8 +1125,37 @@ const getEnviaPayload = async (pedido) => {
   }
   if (totalWeight < 1) totalWeight = 1;
 
-  const stateCode = enviaStateMap[(pedido.estado_env || '').toLowerCase().trim()] || 'JA';
   const destCountryCode = getCountryIsoCode(pedido.pais);
+  const stateCode = getStateCode(pedido.estado_env || pedido.estado, destCountryCode);
+
+  const rawItems = Array.isArray(pedido.items) 
+    ? pedido.items 
+    : (typeof pedido.items === 'string' ? JSON.parse(pedido.items || '[]') : []);
+
+  const packageItems = rawItems.map(item => ({
+    name: String(item.nombre || item.name || 'Producto').substring(0, 50),
+    description: String(item.nombre || item.name || 'Ropa y accesorios').substring(0, 100),
+    quantity: parseInt(item.cantidad || 1),
+    price: parseFloat(item.precio || item.price || 10),
+    product_type: 'apparel'
+  }));
+
+  const itemsDeclaredSum = packageItems.reduce((acc, i) => acc + (i.price * i.quantity), 0);
+  const declaredVal = itemsDeclaredSum > 0 ? itemsDeclaredSum : parseFloat(pedido.total || 10);
+
+  const mainPackage = {
+    content: 'Ropa y Accesorios', amount: 1, type: 'box', weight: totalWeight, insurance: 0, declaredValue: declaredVal, weightUnit: 'KG', lengthUnit: 'CM', dimensions: { length: 30, width: 20, height: 10 }
+  };
+
+  if (destCountryCode !== 'MX') {
+    mainPackage.items = packageItems.length > 0 ? packageItems : [{
+      name: 'Producto Merch ALV',
+      description: 'Ropa y accesorios',
+      quantity: 1,
+      price: declaredVal,
+      product_type: 'apparel'
+    }];
+  }
 
   return {
     origin: {
@@ -1079,12 +1171,11 @@ const getEnviaPayload = async (pedido) => {
       state: stateCode, country: destCountryCode, postalCode: pedido.cp || '00000', reference: pedido.notas || ''
     },
 
-    packages: [{
-      content: 'Ropa y Accesorios', amount: 1, type: 'box', weight: totalWeight, insurance: 0, declaredValue: parseFloat(pedido.total), weightUnit: 'KG', lengthUnit: 'CM', dimensions: { length: 30, width: 20, height: 10 }
-    }],
+    packages: [mainPackage],
     settings: { printFormat: 'PDF', printSize: 'STOCK_4X6' }
   };
 };
+
 
 const getEnviaApiBaseUrl = () => {
   const envUrl = (process.env.ENVIA_API_URL || '').trim();
@@ -1926,7 +2017,37 @@ app.post('/api/mercadopago/process-payment', async (req, res) => {
       return res.status(400).json({ error: 'Datos de pedido incompletos' });
     }
 
+    // 🛡️ Validación Antifraude de Totales en BD
+    let computedSubtotal = 0;
+    for (const item of (items || [])) {
+      const prodId = item.producto_id || item.id;
+      if (prodId && !isNaN(parseInt(prodId, 10))) {
+        const dbP = await pool.query('SELECT precio, descuento FROM products WHERE id = $1', [parseInt(prodId, 10)]);
+        if (dbP.rows.length > 0) {
+          const basePrice = parseFloat(dbP.rows[0].precio || 0);
+          const desc = parseFloat(dbP.rows[0].descuento || 0);
+          const realPrice = desc > 0 ? basePrice * (1 - desc / 100) : basePrice;
+          computedSubtotal += realPrice * parseInt(item.cantidad || 1);
+        }
+      }
+    }
+    const realSubtotal = computedSubtotal > 0 ? Math.round(computedSubtotal * 100) / 100 : parseFloat(subtotal || 0);
+
+    // 🛡️ Validación de costo de envío oficial en BD
+    let realEnvio = parseFloat(envio || 0);
+    if (form && form.pais) {
+      const reglaRes = await pool.query(
+        `SELECT precio_envio FROM reglas_envio WHERE (pais LIKE $1 OR pais = '*') AND deleted_at IS NULL LIMIT 1`,
+        [`%${form.pais}%`]
+      );
+      if (reglaRes.rows.length > 0 && reglaRes.rows[0].precio_envio != null) {
+        realEnvio = parseFloat(reglaRes.rows[0].precio_envio);
+      }
+    }
+    const realTotal = Math.round((realSubtotal + realEnvio) * 100) / 100;
+
     let status = 'approved';
+    let statusDetail = null;
 
     if (paymentData && paymentData.token) {
       const payment = new Payment(mpClient);
@@ -1934,7 +2055,7 @@ app.post('/api/mercadopago/process-payment', async (req, res) => {
         token: paymentData.token,
         issuer_id: paymentData.issuer_id,
         payment_method_id: paymentData.payment_method_id,
-        transaction_amount: Number(total),
+        transaction_amount: realTotal, // 🛡️ Garantiza cobrar el total real calculado
         installments: Number(paymentData.installments || 1),
         description: `Pedido Merch ALV - ${form.nombre}`,
         payer: {
@@ -1946,6 +2067,7 @@ app.post('/api/mercadopago/process-payment', async (req, res) => {
 
       const paymentResponse = await payment.create({ body: paymentBody });
       status = paymentResponse.status;
+      statusDetail = paymentResponse.status_detail || null;
 
       if (status !== 'approved' && status !== 'in_process') {
         return res.status(400).json({
@@ -1966,26 +2088,29 @@ app.post('/api/mercadopago/process-payment', async (req, res) => {
     const domicilio = parts.join(', ');
 
     const orden = Math.floor(100000 + Math.random() * 900000).toString();
+    const estadoInicial = (status === 'approved' || status === 'in_process') ? 'En proceso' : 'Nuevo';
 
     const result = await pool.query(
-      `INSERT INTO pedidos (orden, nombre, correo, telefono, pais, estado_env, ciudad, delegacion, calle, num_ext, num_int, colonia, cp, domicilio, notas, items, subtotal, envio, total, estado) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING *`,
+      `INSERT INTO pedidos (orden, nombre, correo, telefono, pais, estado_env, ciudad, delegacion, calle, num_ext, num_int, colonia, cp, domicilio, notas, items, subtotal, envio, total, estado, motivo_fallo) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) RETURNING *`,
       [
-        orden, form.nombre, form.correo, form.telefono, form.pais, form.estado, form.ciudad, form.delegacion || null, form.calle, form.numExt, form.numInt || null, form.colonia, form.cp, domicilio, form.notas || null, JSON.stringify(items), subtotal, envio, total, 'En proceso'
+        orden, form.nombre, form.correo, form.telefono, form.pais, form.estado, form.ciudad, form.delegacion || null, form.calle, form.numExt, form.numInt || null, form.colonia, form.cp, domicilio, form.notas || null, JSON.stringify(items), realSubtotal, envio, realTotal, estadoInicial, statusDetail
       ]
     );
     const pedidoCreado = result.rows[0];
 
     await pool.query(
       `INSERT INTO pedido_historial (pedido_id, estado) VALUES ($1, $2)`,
-      [pedidoCreado.id, 'En proceso']
+      [pedidoCreado.id, estadoInicial]
     );
 
-    if (typeof manejarDescuentoStock === 'function') {
-      await manejarDescuentoStock(pedidoCreado.id, 'En proceso');
-    }
-    if (typeof sendStatusEmail === 'function') {
-      sendStatusEmail(pedidoCreado, 'En proceso').catch(console.error);
+    if (status === 'approved') {
+      if (typeof manejarDescuentoStock === 'function') {
+        await manejarDescuentoStock(pedidoCreado.id, estadoInicial);
+      }
+      if (typeof sendStatusEmail === 'function') {
+        sendStatusEmail(pedidoCreado, estadoInicial).catch(console.error);
+      }
     }
     
     const clienteExistente = await pool.query('SELECT * FROM clientes WHERE correo = $1', [form.correo]);
@@ -1998,6 +2123,7 @@ app.post('/api/mercadopago/process-payment', async (req, res) => {
     }
 
     res.status(201).json({ success: true, pedido: pedidoCreado, status });
+
   } catch (err) {
     console.error('MercadoPago Order Process Error:', err.message || err);
     res.status(500).json({ error: 'Error al procesar el pago con Mercado Pago', details: err.message });
