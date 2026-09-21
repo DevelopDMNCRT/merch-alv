@@ -250,11 +250,11 @@ app.post('/api/auth/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
     const token = jwt.sign(
-      { id: user.id, username: user.nombre, email: user.correo, rol: user.rol },
+      { id: user.id, username: user.nombre, email: user.correo, rol: user.rol, tiendas_ids: user.tiendas_ids || '' },
       JWT_SECRET,
       { expiresIn: '8h' }
     );
-    res.json({ token, admin: { id: user.id, username: user.nombre, email: user.correo, rol: user.rol } });
+    res.json({ token, admin: { id: user.id, username: user.nombre, email: user.correo, rol: user.rol, tiendas_ids: user.tiendas_ids || '' } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });
@@ -267,10 +267,10 @@ app.get('/api/auth/me', async (req, res) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const result = await pool.query('SELECT id, nombre, correo, rol FROM users WHERE id = $1', [decoded.id]);
+    const result = await pool.query('SELECT id, nombre, correo, rol, tiendas_ids FROM users WHERE id = $1', [decoded.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
     const u = result.rows[0];
-    res.json({ admin: { id: u.id, username: u.nombre, email: u.correo, rol: u.rol } });
+    res.json({ admin: { id: u.id, username: u.nombre, email: u.correo, rol: u.rol, tiendas_ids: u.tiendas_ids || '' } });
   } catch {
     res.status(401).json({ error: 'Token inválido o expirado' });
   }
@@ -280,7 +280,7 @@ app.get('/api/auth/me', async (req, res) => {
 
 app.get('/api/users', async (_req, res) => {
   try {
-    const result = await pool.query('SELECT id, nombre, correo, rol, created_at FROM users ORDER BY created_at DESC');
+    const result = await pool.query('SELECT id, nombre, correo, rol, tiendas_ids, created_at FROM users ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: 'Failed to fetch users' }); }
 });
@@ -288,20 +288,20 @@ app.get('/api/users', async (_req, res) => {
 app.get('/api/users/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('SELECT id, nombre, correo, rol, created_at FROM users WHERE id = $1', [id]);
+    const result = await pool.query('SELECT id, nombre, correo, rol, tiendas_ids, created_at FROM users WHERE id = $1', [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: 'Failed to fetch user' }); }
 });
 
 app.post('/api/users', async (req, res) => {
-  const { nombre, correo, rol, password } = req.body;
+  const { nombre, correo, rol, tiendas_ids, password } = req.body;
   if (!nombre || !correo || !rol || !password) return res.status(400).json({ error: 'All fields are required' });
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (nombre, correo, rol, password) VALUES ($1, $2, $3, $4) RETURNING id, nombre, correo, rol',
-      [nombre, correo, rol, hashedPassword]
+      'INSERT INTO users (nombre, correo, rol, tiendas_ids, password) VALUES ($1, $2, $3, $4, $5) RETURNING id, nombre, correo, rol, tiendas_ids',
+      [nombre, correo, rol, tiendas_ids || '', hashedPassword]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -312,16 +312,16 @@ app.post('/api/users', async (req, res) => {
 
 app.put('/api/users/:id', async (req, res) => {
   const { id } = req.params;
-  const { nombre, correo, rol, password } = req.body;
+  const { nombre, correo, rol, tiendas_ids, password } = req.body;
   try {
     let query, params;
     if (password && password.length > 0) {
       const hashedPassword = await bcrypt.hash(password, 10);
-      query = 'UPDATE users SET nombre=$1, correo=$2, rol=$3, password=$4 WHERE id=$5 RETURNING id, nombre, correo, rol';
-      params = [nombre, correo, rol, hashedPassword, id];
+      query = 'UPDATE users SET nombre=$1, correo=$2, rol=$3, tiendas_ids=$4, password=$5 WHERE id=$6 RETURNING id, nombre, correo, rol, tiendas_ids';
+      params = [nombre, correo, rol, tiendas_ids || '', hashedPassword, id];
     } else {
-      query = 'UPDATE users SET nombre=$1, correo=$2, rol=$3 WHERE id=$4 RETURNING id, nombre, correo, rol';
-      params = [nombre, correo, rol, id];
+      query = 'UPDATE users SET nombre=$1, correo=$2, rol=$3, tiendas_ids=$4 WHERE id=$5 RETURNING id, nombre, correo, rol, tiendas_ids';
+      params = [nombre, correo, rol, tiendas_ids || '', id];
     }
     const result = await pool.query(query, params);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -777,9 +777,36 @@ app.get('/', (_req, res) => res.json({ message: 'Merch ALV API is running' }));
 // --- Tiendas CRUD ---
 
 // GET all tiendas
-app.get('/api/tiendas', async (_req, res) => {
+app.get('/api/tiendas', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM tiendas WHERE deleted_at IS NULL ORDER BY orden ASC, id DESC');
+    let allowedTiendaIds = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.rol === 'Socio') {
+          const uRes = await pool.query('SELECT rol, tiendas_ids FROM users WHERE id = $1', [decoded.id]);
+          if (uRes.rows.length && uRes.rows[0].rol === 'Socio') {
+            const rawIds = uRes.rows[0].tiendas_ids || '';
+            allowedTiendaIds = rawIds.split(',').map(x => x.trim()).filter(Boolean);
+          }
+        }
+      } catch (e) {}
+    }
+
+    let query = 'SELECT * FROM tiendas WHERE deleted_at IS NULL';
+    const params = [];
+    if (allowedTiendaIds !== null) {
+      if (allowedTiendaIds.length === 0) {
+        return res.json([]);
+      }
+      query += ' AND id = ANY($1::int[])';
+      params.push(allowedTiendaIds.map(Number));
+    }
+    query += ' ORDER BY orden ASC, id DESC';
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -1814,19 +1841,66 @@ app.delete('/api/suscriptores/:id', async (req, res) => {
 });
 
 // --- Estadísticas ---
-app.get('/api/estadisticas/live', async (_req, res) => {
+app.get('/api/estadisticas/live', async (req, res) => {
   try {
-    // 1. Pedidos Nuevos
-    const pnRes = await pool.query("SELECT COUNT(*) FROM pedidos WHERE estado = 'Nuevo'");
-    const pedidosNuevos = parseInt(pnRes.rows[0].count, 10);
+    let allowedTiendaIds = null;
+    let allowedNames = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.rol === 'Socio') {
+          const uRes = await pool.query('SELECT rol, tiendas_ids FROM users WHERE id = $1', [decoded.id]);
+          if (uRes.rows.length && uRes.rows[0].rol === 'Socio') {
+            const rawIds = uRes.rows[0].tiendas_ids || '';
+            allowedTiendaIds = rawIds.split(',').map(x => x.trim()).filter(Boolean);
+            if (allowedTiendaIds.length > 0) {
+              const tRes = await pool.query('SELECT nombre FROM tiendas WHERE id = ANY($1::int[])', [allowedTiendaIds.map(Number)]);
+              allowedNames = tRes.rows.map(t => t.nombre);
+            } else {
+              allowedNames = [];
+            }
+          }
+        }
+      } catch (e) {}
+    }
 
-    // 2. Ingresos del día
-    // 'CURRENT_DATE' usa la zona horaria del servidor
-    const indRes = await pool.query("SELECT SUM(total) FROM pedidos WHERE DATE(created_at) = CURRENT_DATE AND estado NOT IN ('Cancelado', 'Fallido')");
-    const ingresosHoy = parseFloat(indRes.rows[0].sum || 0);
+    if (allowedNames !== null && allowedNames.length === 0) {
+      return res.json({ pedidosNuevos: 0, ingresosHoy: 0, bestSeller: null });
+    }
 
-    // 3. Best Seller (Producto más vendido activo)
-    const bsRes = await pool.query(`
+    let pnQuery = "SELECT COUNT(*) FROM pedidos WHERE estado = 'Nuevo'";
+    let pnParams = [];
+    if (allowedNames !== null) {
+      pnQuery = `
+        SELECT COUNT(DISTINCT p.id) 
+        FROM pedidos p 
+        CROSS JOIN json_array_elements(p.items::json) i 
+        JOIN products pr ON pr.id = (i->>'producto_id')::int 
+        WHERE p.estado = 'Nuevo' AND pr.tienda = ANY($1::text[])
+      `;
+      pnParams = [allowedNames];
+    }
+    const pnRes = await pool.query(pnQuery, pnParams);
+    const pedidosNuevos = parseInt(pnRes.rows[0]?.count || 0, 10);
+
+    let indQuery = "SELECT SUM(total) FROM pedidos WHERE DATE(created_at) = CURRENT_DATE AND estado NOT IN ('Cancelado', 'Fallido')";
+    let indParams = [];
+    if (allowedNames !== null) {
+      indQuery = `
+        SELECT SUM((i->>'cantidad')::numeric * (i->>'precio')::numeric) 
+        FROM pedidos p 
+        CROSS JOIN json_array_elements(p.items::json) i 
+        JOIN products pr ON pr.id = (i->>'producto_id')::int 
+        WHERE DATE(p.created_at) = CURRENT_DATE AND p.estado NOT IN ('Cancelado', 'Fallido') AND pr.tienda = ANY($1::text[])
+      `;
+      indParams = [allowedNames];
+    }
+    const indRes = await pool.query(indQuery, indParams);
+    const ingresosHoy = parseFloat(indRes.rows[0]?.sum || 0);
+
+    let bsQuery = `
       SELECT p.id, p.nombre, p.imagen_principal, p.precio, SUM((i->>'cantidad')::int) as vendidos
       FROM pedidos ped
       CROSS JOIN json_array_elements(ped.items::json) as i
@@ -1835,7 +1909,22 @@ app.get('/api/estadisticas/live', async (_req, res) => {
       GROUP BY p.id, p.nombre, p.imagen_principal, p.precio
       ORDER BY vendidos DESC
       LIMIT 1
-    `);
+    `;
+    let bsParams = [];
+    if (allowedNames !== null) {
+      bsQuery = `
+        SELECT p.id, p.nombre, p.imagen_principal, p.precio, SUM((i->>'cantidad')::int) as vendidos
+        FROM pedidos ped
+        CROSS JOIN json_array_elements(ped.items::json) as i
+        JOIN products p ON (i->>'producto_id')::int = p.id
+        WHERE p.activo = true AND ped.estado NOT IN ('Cancelado', 'Fallido') AND p.tienda = ANY($1::text[])
+        GROUP BY p.id, p.nombre, p.imagen_principal, p.precio
+        ORDER BY vendidos DESC
+        LIMIT 1
+      `;
+      bsParams = [allowedNames];
+    }
+    const bsRes = await pool.query(bsQuery, bsParams);
     const bestSeller = bsRes.rows.length ? bsRes.rows[0] : null;
 
     res.json({
@@ -1856,7 +1945,33 @@ app.get('/api/estadisticas/ventas-mes', async (req, res) => {
     const year = parseInt(req.query.anio) || today.getFullYear();
     const month = parseInt(req.query.mes) || (today.getMonth() + 1);
 
-    const result = await pool.query(`
+    let allowedNames = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.rol === 'Socio') {
+          const uRes = await pool.query('SELECT rol, tiendas_ids FROM users WHERE id = $1', [decoded.id]);
+          if (uRes.rows.length && uRes.rows[0].rol === 'Socio') {
+            const rawIds = uRes.rows[0].tiendas_ids || '';
+            const ids = rawIds.split(',').map(x => x.trim()).filter(Boolean);
+            if (ids.length > 0) {
+              const tRes = await pool.query('SELECT nombre FROM tiendas WHERE id = ANY($1::int[])', [ids.map(Number)]);
+              allowedNames = tRes.rows.map(t => t.nombre);
+            } else {
+              allowedNames = [];
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (allowedNames !== null && allowedNames.length === 0) {
+      return res.json({ anio: year, mes: month, datos: [] });
+    }
+
+    let query = `
       SELECT 
         EXTRACT(DAY FROM created_at) AS dia,
         SUM(total) AS total_dia
@@ -1867,9 +1982,30 @@ app.get('/api/estadisticas/ventas-mes', async (req, res) => {
         AND estado NOT IN ('Cancelado', 'Fallido')
       GROUP BY dia
       ORDER BY dia ASC
-    `, [year, month]);
+    `;
+    let params = [year, month];
 
-    // Format output as array of { dia, total }
+    if (allowedNames !== null) {
+      query = `
+        SELECT 
+          EXTRACT(DAY FROM p.created_at) AS dia,
+          SUM((i->>'cantidad')::numeric * (i->>'precio')::numeric) AS total_dia
+        FROM pedidos p
+        CROSS JOIN json_array_elements(p.items::json) i
+        JOIN products pr ON pr.id = (i->>'producto_id')::int
+        WHERE 
+          EXTRACT(YEAR FROM p.created_at) = $1
+          AND EXTRACT(MONTH FROM p.created_at) = $2
+          AND p.estado NOT IN ('Cancelado', 'Fallido')
+          AND pr.tienda = ANY($3::text[])
+        GROUP BY dia
+        ORDER BY dia ASC
+      `;
+      params = [year, month, allowedNames];
+    }
+
+    const result = await pool.query(query, params);
+
     const datosDia = result.rows.map(r => ({
       dia: parseInt(r.dia, 10),
       total: parseFloat(r.total_dia)
@@ -1890,9 +2026,24 @@ app.get('/api/reportes/ventas', async (req, res) => {
     const anio = parseInt(req.query.anio) || today.getFullYear();
     const { tienda_id, mes } = req.query;
 
+    let allowedTiendaIds = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.rol === 'Socio') {
+          const uRes = await pool.query('SELECT rol, tiendas_ids FROM users WHERE id = $1', [decoded.id]);
+          if (uRes.rows.length && uRes.rows[0].rol === 'Socio') {
+            const rawIds = uRes.rows[0].tiendas_ids || '';
+            allowedTiendaIds = rawIds.split(',').map(x => x.trim()).filter(Boolean);
+          }
+        }
+      } catch (e) {}
+    }
+
     const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-    // Use EXTRACT(MONTH) to avoid locale-dependent TO_CHAR month names (English vs Spanish)
     let query = `
       SELECT
         EXTRACT(MONTH FROM p.created_at)::int AS mes_num,
@@ -1908,9 +2059,42 @@ app.get('/api/reportes/ventas', async (req, res) => {
     const params = [anio];
     let paramIdx = 2;
 
-    // Filter by tienda using EXISTS subquery
-    // NOTE: items JSON uses 'producto_id' (not 'id') for the real product ID
-    if (tienda_id && tienda_id !== 'todas') {
+    if (allowedTiendaIds !== null) {
+      if (allowedTiendaIds.length === 0) {
+        const porMesEmpty = {};
+        MESES.forEach(m => { porMesEmpty[m] = 0; });
+        return res.json({ rows: [], porMes: porMesEmpty });
+      }
+      if (tienda_id && tienda_id !== 'todas') {
+        if (!allowedTiendaIds.includes(String(tienda_id))) {
+          const porMesEmpty = {};
+          MESES.forEach(m => { porMesEmpty[m] = 0; });
+          return res.json({ rows: [], porMes: porMesEmpty });
+        }
+        const tiendaRes = await pool.query('SELECT nombre FROM tiendas WHERE id = $1', [tienda_id]);
+        if (tiendaRes.rows.length) {
+          query += ` AND EXISTS (
+            SELECT 1 FROM products WHERE id = (item->>'producto_id')::int AND tienda = $${paramIdx}
+          )`;
+          params.push(tiendaRes.rows[0].nombre);
+          paramIdx++;
+        }
+      } else {
+        const tiendasRes = await pool.query('SELECT nombre FROM tiendas WHERE id = ANY($1::int[])', [allowedTiendaIds.map(Number)]);
+        const allowedNames = tiendasRes.rows.map(t => t.nombre);
+        if (allowedNames.length > 0) {
+          query += ` AND EXISTS (
+            SELECT 1 FROM products WHERE id = (item->>'producto_id')::int AND tienda = ANY($${paramIdx}::text[])
+          )`;
+          params.push(allowedNames);
+          paramIdx++;
+        } else {
+          const porMesEmpty = {};
+          MESES.forEach(m => { porMesEmpty[m] = 0; });
+          return res.json({ rows: [], porMes: porMesEmpty });
+        }
+      }
+    } else if (tienda_id && tienda_id !== 'todas') {
       const tiendaRes = await pool.query('SELECT nombre FROM tiendas WHERE id = $1', [tienda_id]);
       if (tiendaRes.rows.length) {
         query += ` AND EXISTS (

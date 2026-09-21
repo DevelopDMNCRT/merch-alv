@@ -1,4 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
+
+const PUBLIC_ROUTES = ['/signin', '/signup', '/error-404']
+const SOCIO_ALLOWED_ROUTES = ['/', '/reporte', ...PUBLIC_ROUTES]
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -177,12 +181,14 @@ const router = createRouter({
   ],
 })
 
-export default router
-
-const PUBLIC_ROUTES = ['/signin', '/signup', '/error-404']
-
 router.beforeEach((to, _from, next) => {
-  document.title = `${to.meta.title} | Merch ALV Admin`
-  // Login guard disabled
+  document.title = `${to.meta.title ? to.meta.title + ' | ' : ''}Merch ALV Admin`
+  const { isSocio } = useAuth()
+  if (!PUBLIC_ROUTES.includes(to.path) && isSocio.value && !SOCIO_ALLOWED_ROUTES.includes(to.path)) {
+    return next('/reporte')
+  }
   next()
 })
+
+export default router
+

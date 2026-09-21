@@ -210,6 +210,7 @@
 <script setup>
 import { ref, computed } from "vue";
 import { useRoute } from "vue-router";
+import { useAuth } from "@/composables/useAuth";
 
 import {
   PieChartIcon,
@@ -228,10 +229,11 @@ import SidebarWidget from "./SidebarWidget.vue";
 import { useSidebar } from "@/composables/useSidebar";
 
 const route = useRoute();
+const { isSocio } = useAuth();
 
 const { isExpanded, isMobileOpen, isHovered, openSubmenu } = useSidebar();
 
-const menuGroups = [
+const allMenuGroups = [
   {
     title: "Administrador",
     items: [
@@ -271,23 +273,46 @@ const menuGroups = [
         path: "/tiendas",
       },
       {
-        icon: ListIcon, // You can change this to a different icon like DocumentReport if available, using ListIcon for now.
+        icon: ListIcon,
         name: "Reporte",
         path: "/reporte",
       },
       {
-        icon: BoxIcon, // Using BoxIcon for now, you might want to choose a different one
+        icon: BoxIcon,
         name: "Inventario",
         path: "/inventario",
       },
       {
-        icon: BoxIcon, // You can change the icon later
+        icon: BoxIcon,
         name: "Envío",
         path: "/envio",
       },
     ],
   },
 ];
+
+const menuGroups = computed(() => {
+  if (isSocio.value) {
+    return [
+      {
+        title: "Socio",
+        items: [
+          {
+            icon: PieChartIcon,
+            name: "Estadísticas",
+            path: "/",
+          },
+          {
+            icon: ListIcon,
+            name: "Reporte",
+            path: "/reporte",
+          },
+        ],
+      },
+    ];
+  }
+  return allMenuGroups;
+});
 
 const isActive = (path) => route.path === path;
 
@@ -297,7 +322,7 @@ const toggleSubmenu = (groupIndex, itemIndex) => {
 };
 
 const isAnySubmenuRouteActive = computed(() => {
-  return menuGroups.some((group) =>
+  return menuGroups.value.some((group) =>
     group.items.some(
       (item) =>
         item.subItems && item.subItems.some((subItem) => isActive(subItem.path))
@@ -310,7 +335,7 @@ const isSubmenuOpen = (groupIndex, itemIndex) => {
   return (
     openSubmenu.value === key ||
     (isAnySubmenuRouteActive.value &&
-      menuGroups[groupIndex].items[itemIndex].subItems?.some((subItem) =>
+      menuGroups.value[groupIndex]?.items[itemIndex]?.subItems?.some((subItem) =>
         isActive(subItem.path)
       ))
   );
