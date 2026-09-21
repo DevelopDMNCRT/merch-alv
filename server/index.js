@@ -1187,17 +1187,18 @@ const getEnviaApiBaseUrl = () => {
 
 app.post('/api/pedidos/:id/cotizar-envio', async (req, res) => {
   try {
+    const enviaApiKey = process.env.ENVIA_API_KEY;
+    if (!enviaApiKey) {
+      return res.status(400).json({ error: 'La API Key de Envia.com no ha sido configurada en el servidor.' });
+    }
+
     const { id } = req.params;
     const { rows } = await pool.query('SELECT * FROM pedidos WHERE id = $1', [id]);
     if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     const payload = await getEnviaPayload(rows[0]);
     const enviaApiUrl = getEnviaApiBaseUrl();
-
-    const enviaApiKey = process.env.ENVIA_API_KEY;
-    console.log(`[Envia] Usando entorno: ${enviaApiUrl}`);
     const enviaQueriesUrl = enviaApiUrl.includes('api-test') ? 'https://queries-test.envia.com' : 'https://queries.envia.com';
-
 
     // Override package weight/dims/type if custom values sent from frontend
     if (req.body.peso || req.body.dims || req.body.type) {
@@ -1268,7 +1269,6 @@ app.post('/api/pedidos/:id/cotizar-envio', async (req, res) => {
     // Step 2a: Try a single multicarrier call (no carrier specified) — returns all available rates
     try {
       const multiPayload = { ...payload };
-      // Remove shipment field to let Envia return all carriers
       delete multiPayload.shipment;
       const response = await fetch(`${enviaApiUrl}/ship/rate/`, {
         method: 'POST',
@@ -1310,6 +1310,11 @@ app.post('/api/pedidos/:id/cotizar-envio', async (req, res) => {
 
 app.post('/api/pedidos/:id/generar-guia', async (req, res) => {
   try {
+    const enviaApiKey = process.env.ENVIA_API_KEY;
+    if (!enviaApiKey) {
+      return res.status(400).json({ error: 'La API Key de Envia.com no ha sido configurada en el servidor.' });
+    }
+
     const { id } = req.params;
     const { carrier, service } = req.body;
     
@@ -1376,7 +1381,7 @@ app.post('/api/pedidos/:id/generar-guia', async (req, res) => {
     const enviaApiUrl = getEnviaApiBaseUrl();
     const response = await fetch(`${enviaApiUrl}/ship/generate/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.ENVIA_API_KEY}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${enviaApiKey}` },
       body: JSON.stringify(payload)
     });
     const data = await response.json();
@@ -1402,6 +1407,11 @@ app.post('/api/pedidos/:id/generar-guia', async (req, res) => {
 
 app.post('/api/pedidos/:id/cancelar-guia', async (req, res) => {
   try {
+    const enviaApiKey = process.env.ENVIA_API_KEY;
+    if (!enviaApiKey) {
+      return res.status(400).json({ error: 'La API Key de Envia.com no ha sido configurada en el servidor.' });
+    }
+
     const { id } = req.params;
     const { rows } = await pool.query('SELECT * FROM pedidos WHERE id = $1', [id]);
     if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
@@ -1409,27 +1419,23 @@ app.post('/api/pedidos/:id/cancelar-guia', async (req, res) => {
     const pedido = rows[0];
     if (!pedido.tracking_number) return res.status(400).json({ error: 'Este pedido no tiene guía activa para cancelar' });
 
-    // Determinar carrier (si es guía vieja, viene en el body manual)
     const activeCarrier = pedido.carrier || req.body.carrier;
     if (!activeCarrier) {
       return res.status(400).json({ error: 'Falta la paquetería (carrier) para poder cancelar esta guía antigua.' });
     }
 
-    // Cancelar en Envia.com
     const enviaApiUrl = getEnviaApiBaseUrl();
     const response = await fetch(`${enviaApiUrl}/ship/cancel/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.ENVIA_API_KEY}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${enviaApiKey}` },
       body: JSON.stringify({ carrier: activeCarrier, tracking_number: pedido.tracking_number })
     });
     const cancelData = await response.json();
     
-    // Si la respuesta no indica éxito, retornar error (Envia puede rechazar si ya va en camino)
     if (!response.ok) {
       return res.status(400).json({ error: 'Error al cancelar en Envia.com', details: cancelData });
     }
 
-    // Agregar al historial de canceladas
     const canceledGuide = {
       tracking_number: pedido.tracking_number,
       guia_url: pedido.guia_url,
@@ -1440,7 +1446,6 @@ app.post('/api/pedidos/:id/cancelar-guia', async (req, res) => {
     const guiasCanceladas = pedido.guias_canceladas || [];
     guiasCanceladas.push(canceledGuide);
 
-    // Actualizar pedido en BD
     const result = await pool.query(
       'UPDATE pedidos SET tracking_number = NULL, guia_url = NULL, carrier = NULL, guias_canceladas = $1 WHERE id = $2 RETURNING *',
       [JSON.stringify(guiasCanceladas), id]
@@ -1456,13 +1461,27 @@ app.post('/api/pedidos/:id/cancelar-guia', async (req, res) => {
 // GET Envia.com Wallet Balance
 app.get('/api/envia/saldo', async (req, res) => {
   try {
-    const response = await fetch('https://queries.envia.com/user-information?encoded=false', {
+    const enviaApiKey = process.env.ENVIA_API_KEY;
+    if (!enviaApiKey) {
+      return res.status(400).json({ error: 'La API Key de Envia.com no está configurada.' });
+    }
+    const enviaApiUrl = getEnviaApiBaseUrl();
+    const enviaQueriesUrl = enviaApiUrl.includes('api-test') ? 'https://queries-test.envia.com' : 'https://queries.envia.com';
+    const response = await fetch(`${enviaQueriesUrl}/user-information?encoded=false`, {
       method: 'GET',
-      headers: { 'Authorization': `Bearer ${process.env.ENVIA_API_KEY}` }
+      headers: { 'Authorization': `Bearer ${enviaApiKey}` }
     });
-    if (!response.ok) throw new Error('Error de conexión con Envia');
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      return res.status(response.status).json({ error: 'Error de conexión o autenticación con Envia.com', details: errData });
+    }
     const data = await response.json();
-    res.json({ balance: data.company_balance || 0, currency: data.company_currency || 'MXN' });
+    res.json({
+      balance: data.company_balance || '0.00',
+      currency: data.company_currency || 'MXN',
+      company_name: data.company_name || '',
+      email: data.user_email || ''
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch Envia balance' });

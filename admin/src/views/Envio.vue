@@ -391,7 +391,7 @@ const abrirModalRegla = () => {
 const editarRegla = (regla) => {
   nuevaRegla.value = {
     id: regla.id,
-    paises: regla.pais.split(',').map(p => p.trim()),
+    paises: typeof regla.pais === 'string' ? regla.pais.split(',').map(p => p.trim()) : (Array.isArray(regla.pais) ? regla.pais : []),
     estados: parseEstados(regla.estados),
     precio: Number(regla.precio)
   };
@@ -421,13 +421,16 @@ const removerEstado = (est) => {
 
 // GUARDAR Regla
 const guardarRegla = async () => {
-  if (nuevaRegla.value.paises.length === 0) return;
+  if (nuevaRegla.value.paises.length === 0) {
+    alert('Debes seleccionar al menos un país');
+    return;
+  }
   savingRegla.value = true;
   
   const payload = {
     pais: nuevaRegla.value.paises.join(', '),
     estados: nuevaRegla.value.estados.length ? nuevaRegla.value.estados : null,
-    precio: nuevaRegla.value.precio || 0
+    precio: Number(nuevaRegla.value.precio) || 0
   };
 
   try {
@@ -449,15 +452,22 @@ const guardarRegla = async () => {
     if (res.ok) {
       const guardada = await res.json();
       if (nuevaRegla.value.id) {
-        const idx = reglas.value.findIndex(r => r.id === guardada.id);
+        const idx = reglas.value.findIndex(r => String(r.id) === String(guardada.id));
         if (idx !== -1) reglas.value[idx] = guardada;
       } else {
         reglas.value.unshift(guardada);
       }
       mostrarModalRegla.value = false;
+    } else {
+      const err = await res.json();
+      alert(`Error al guardar la regla: ${err.error || res.statusText}`);
     }
-  } catch (e) { console.error('Error saving regla:', e); }
-  finally { savingRegla.value = false; }
+  } catch (e) {
+    console.error('Error saving regla:', e);
+    alert('Error de red al guardar la regla de envío');
+  } finally {
+    savingRegla.value = false;
+  }
 };
 
 // ELIMINAR Regla
