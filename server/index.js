@@ -2220,64 +2220,90 @@ app.delete('/api/reglas-envio/:id', async (req, res) => {
 app.get('/api/reportes/stock-pdf', async (req, res) => {
   try {
     const PDFDocument = require('pdfkit');
-    const doc = new PDFDocument({ margin: 50 });
+    const path = require('path');
+    const fs = require('fs');
+
+    const doc = new PDFDocument({ margin: 50, bufferPages: true });
     
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename=reporte-stock.pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=reporte-stock-merchalv.pdf');
     doc.pipe(res);
     
-    const productsRes = await pool.query('SELECT id, nombre, es_variable, stock FROM products WHERE deleted_at IS NULL ORDER BY nombre');
+    const productsRes = await pool.query(`
+      SELECT id, nombre, es_variable, stock, tienda
+      FROM products
+      WHERE deleted_at IS NULL
+      ORDER BY tienda ASC NULLS LAST, nombre ASC
+    `);
     const varsRes = await pool.query('SELECT product_id, valor, color, stock FROM product_variations');
     
     let inventario = [];
     let totalPiezas = 0;
     
     for (const prod of productsRes.rows) {
+      const tiendaNombre = prod.tienda || 'General';
       if (prod.es_variable) {
         const prodVars = varsRes.rows.filter(v => v.product_id === prod.id);
         if (prodVars.length > 0) {
           prodVars.forEach(v => {
             const varName = v.color ? `${v.valor} / ${v.color}` : v.valor;
-            inventario.push({ producto: prod.nombre, variacion: varName, unidades: v.stock || 0 });
-            totalPiezas += (v.stock || 0);
+            const u = v.stock || 0;
+            inventario.push({ producto: prod.nombre, tienda: tiendaNombre, variacion: varName, unidades: u });
+            totalPiezas += u;
           });
         } else {
-          inventario.push({ producto: prod.nombre, variacion: 'N/A', unidades: 0 });
+          inventario.push({ producto: prod.nombre, tienda: tiendaNombre, variacion: 'N/A', unidades: 0 });
         }
       } else {
-        inventario.push({ producto: prod.nombre, variacion: 'N/A', unidades: prod.stock || 0 });
-        totalPiezas += (prod.stock || 0);
+        const u = prod.stock || 0;
+        inventario.push({ producto: prod.nombre, tienda: tiendaNombre, variacion: 'N/A', unidades: u });
+        totalPiezas += u;
       }
     }
     
-    const path = require('path');
-    const fs = require('fs');
-    const logoPath = path.join(__dirname, '../client/public/logo-light-01.png');
-    if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 432, 45, { width: 130 });
+    // Logo Oficial Merch a la Venta
+    const possibleLogos = [
+      path.join(__dirname, '../client/public/logo-light-01.png'),
+      path.join(__dirname, '../admin/public/logo-light-01.png'),
+      path.join(__dirname, 'logo-email.png')
+    ];
+    const logoPath = possibleLogos.find(p => fs.existsSync(p));
+    if (logoPath) {
+      doc.image(logoPath, 410, 40, { width: 140 });
     }
     
-    doc.fontSize(24).font('Helvetica-Bold').fillColor('#000000').text('Reporte de Inventario');
-    doc.moveDown(0.2);
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('#ef4444').text(`TOTAL PIEZAS DISPONIBLES: ${totalPiezas}`);
-    doc.moveDown(1.5);
+    // Encabezado Corporativo
+    doc.fontSize(20).font('Helvetica-Bold').fillColor('#101828').text('MERCH A LA VENTA', 50, 45);
+    doc.fontSize(11).font('Helvetica').fillColor('#475467').text('Reporte Oficial de Inventario y Stock', 50, 70);
+    const fechaActual = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    doc.fontSize(8.5).font('Helvetica').fillColor('#667085').text(`Generado el: ${fechaActual}`, 50, 85);
     
-    const tableTop = doc.y;
-    const col1X = 50;
-    const col2X = 260;
-    const col3X = 400;
-    const rowHeight = 25;
-    let y = tableTop;
+    doc.y = 110;
+    
+    // Banner de Resumen Total con Colores Oficiales (#101828 y acento #ef4444)
+    const bannerY = doc.y;
+    doc.rect(50, bannerY, 512, 28).fill('#101828');
+    doc.rect(50, bannerY + 26, 512, 2).fill('#ef4444');
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#FFFFFF').text(`TOTAL PIEZAS DISPONIBLES EN STOCK: ${totalPiezas}`, 60, bannerY + 9);
+    
+    doc.y = bannerY + 45;
+    
+    const col1X = 50;  // Producto
+    const col2X = 220; // Tienda
+    const col3X = 335; // Variación
+    const col4X = 470; // Unidades
+    const rowHeight = 24;
+    let y = doc.y;
 
     const drawHeader = (startY) => {
-      // Black background for table header
-      doc.rect(50, startY, 512, rowHeight).fill('#000000');
-      // Red accent line at the bottom of the header row
+      // Encabezado de tabla con estilo de marca
+      doc.rect(50, startY, 512, rowHeight).fill('#101828');
       doc.rect(50, startY + rowHeight - 2, 512, 2).fill('#ef4444');
-      doc.font('Helvetica-Bold').fontSize(10).fillColor('#FFFFFF');
-      doc.text('Producto', col1X + 10, startY + 8);
-      doc.text('Variación (Talla/Color)', col2X + 10, startY + 8);
-      doc.text('Unidades', col3X, startY + 8, { width: 150, align: 'right' });
+      doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#FFFFFF');
+      doc.text('Producto', col1X + 8, startY + 7);
+      doc.text('Tienda', col2X + 8, startY + 7);
+      doc.text('Variación', col3X + 8, startY + 7);
+      doc.text('Stock', col4X, startY + 7, { width: 85, align: 'right' });
       return startY + rowHeight;
     };
 
@@ -2286,35 +2312,60 @@ app.get('/api/reportes/stock-pdf', async (req, res) => {
     for (let i = 0; i < inventario.length; i++) {
       const item = inventario[i];
       
-      if (y > 700) {
+      if (y > 710) {
         doc.addPage();
-        y = 50;
+        y = 45;
+        if (logoPath) {
+          doc.image(logoPath, 450, 35, { width: 100 });
+        }
         y = drawHeader(y);
       }
       
+      // Filas alternadas suaves
       if (i % 2 !== 0) {
-        doc.rect(50, y, 512, rowHeight).fill('#F9FAFB');
+        doc.rect(50, y, 512, rowHeight).fill('#F8FAFC');
       } else {
         doc.rect(50, y, 512, rowHeight).fill('#FFFFFF');
       }
       
-      doc.font('Helvetica').fontSize(10).fillColor('#6B7280');
+      // Línea divisoria sutil
+      doc.rect(50, y + rowHeight - 1, 512, 1).fill('#EAECF0');
+      
+      doc.font('Helvetica').fontSize(9).fillColor('#475467');
       
       let pName = item.producto;
-      if (pName.length > 40) pName = pName.substring(0, 37) + '...';
+      if (pName.length > 28) pName = pName.substring(0, 26) + '...';
+      let tName = item.tienda;
+      if (tName.length > 18) tName = tName.substring(0, 16) + '...';
       let vName = item.variacion;
-      if (vName.length > 25) vName = vName.substring(0, 22) + '...';
+      if (vName.length > 20) vName = vName.substring(0, 18) + '...';
       
-      doc.text(pName, col1X + 10, y + 8, { lineBreak: false });
-      doc.text(vName, col2X + 10, y + 8, { lineBreak: false });
-      doc.text(item.unidades.toString(), col3X, y + 8, { width: 150, align: 'right', lineBreak: false });
+      doc.font('Helvetica-Bold').fillColor('#101828').text(pName, col1X + 8, y + 7, { lineBreak: false });
+      doc.font('Helvetica').fillColor('#475467').text(tName, col2X + 8, y + 7, { lineBreak: false });
+      doc.font('Helvetica').fillColor('#667085').text(vName, col3X + 8, y + 7, { lineBreak: false });
+      
+      // Resaltar en rojo si no hay stock
+      if (item.unidades === 0) {
+        doc.font('Helvetica-Bold').fillColor('#EF4444').text('0', col4X, y + 7, { width: 85, align: 'right', lineBreak: false });
+      } else {
+        doc.font('Helvetica-Bold').fillColor('#101828').text(item.unidades.toString(), col4X, y + 7, { width: 85, align: 'right', lineBreak: false });
+      }
       
       y += rowHeight;
+    }
+
+    // Pie de página dinámico en cada hoja
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      doc.fontSize(8).font('Helvetica').fillColor('#98A2B3');
+      doc.text('Merch a la Venta — Control Oficial de Inventarios', 50, 750, { lineBreak: false });
+      doc.text(`Página ${i + 1} de ${range.count}`, 450, 750, { width: 112, align: 'right', lineBreak: false });
     }
     
     doc.end();
   } catch (err) {
-    console.error(err);
+    console.error('Error al generar PDF:', err);
     if (!res.headersSent) {
       res.status(500).json({ error: 'Error al generar PDF' });
     }
@@ -2363,6 +2414,83 @@ app.get('/api/reportes/inventario', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener inventario' });
+  }
+});
+
+// --- Reporte CSV Stock por Variación ---
+app.get('/api/reportes/stock-csv', async (req, res) => {
+  try {
+    const productsRes = await pool.query(`
+      SELECT id, nombre, es_variable, stock, tienda
+      FROM products
+      WHERE deleted_at IS NULL
+      ORDER BY tienda ASC NULLS LAST, nombre ASC
+    `);
+    const varsRes = await pool.query('SELECT product_id, valor, color, stock FROM product_variations');
+
+    const escapeCsv = (val) => {
+      const str = String(val ?? '');
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    };
+
+    let csvLines = [];
+    csvLines.push(['Producto', 'Tienda', 'Variación', 'Talla', 'Color', 'Stock'].map(escapeCsv).join(','));
+
+    for (const prod of productsRes.rows) {
+      const tiendaNombre = prod.tienda || 'General';
+      if (prod.es_variable) {
+        const prodVars = varsRes.rows.filter(v => v.product_id === prod.id);
+        if (prodVars.length > 0) {
+          prodVars.forEach(v => {
+            const talla = v.valor || '';
+            const color = v.color || '';
+            let varName = '';
+            if (talla && color) varName = `${talla} / ${color}`;
+            else if (talla) varName = talla;
+            else if (color) varName = color;
+            else varName = 'Sin especificar';
+
+            csvLines.push([
+              prod.nombre,
+              tiendaNombre,
+              varName,
+              talla,
+              color,
+              v.stock || 0
+            ].map(escapeCsv).join(','));
+          });
+        } else {
+          csvLines.push([
+            prod.nombre,
+            tiendaNombre,
+            'N/A',
+            '',
+            '',
+            0
+          ].map(escapeCsv).join(','));
+        }
+      } else {
+        csvLines.push([
+          prod.nombre,
+          tiendaNombre,
+          'N/A',
+          '',
+          '',
+          prod.stock || 0
+        ].map(escapeCsv).join(','));
+      }
+    }
+
+    const csvContent = '\uFEFF' + csvLines.join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=reporte-inventario-variaciones.csv');
+    res.status(200).send(csvContent);
+  } catch (err) {
+    console.error('Error al generar CSV de inventario:', err);
+    res.status(500).json({ error: 'Error al generar reporte CSV' });
   }
 });
 
