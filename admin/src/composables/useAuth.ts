@@ -2,13 +2,22 @@ import { ref, computed } from 'vue'
 
 const TOKEN_KEY = 'merch_alv_admin_token'
 
+export interface AdminUser {
+  id: number
+  username: string
+  email: string
+  rol?: string
+  tiendas_ids?: string
+}
+
 const token = ref<string | null>(localStorage.getItem(TOKEN_KEY))
-const admin = ref<{ id: number; username: string; email: string } | null>(null)
+const admin = ref<AdminUser | null>(null)
 
 export function useAuth() {
   const isAuthenticated = computed(() => !!token.value)
+  const isSocio = computed(() => admin.value?.rol === 'Socio')
 
-  function setToken(t: string, user: typeof admin.value) {
+  function setToken(t: string, user: AdminUser | null) {
     token.value = t
     admin.value = user
     localStorage.setItem(TOKEN_KEY, t)
@@ -52,5 +61,6 @@ export function useAuth() {
     clearAuth()
   }
 
-  return { token, admin, isAuthenticated, login, logout, verifyToken }
+  return { token, admin, isAuthenticated, isSocio, login, logout, verifyToken }
 }
+

@@ -131,11 +131,21 @@ const porMesData = ref({});
 
 const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+import { useAuth } from '@/composables/useAuth';
+
+const { token, isSocio } = useAuth();
+
 // --- Fetch tiendas reales ---
 const fetchTiendas = async () => {
   try {
-    const res = await fetch('/api/tiendas');
-    if (res.ok) tiendas.value = await res.json();
+    const headers = token.value ? { Authorization: `Bearer ${token.value}` } : {};
+    const res = await fetch('/api/tiendas', { headers });
+    if (res.ok) {
+      tiendas.value = await res.json();
+      if (isSocio.value && tiendas.value.length === 1) {
+        selectedTienda.value = tiendas.value[0].id;
+      }
+    }
   } catch (e) { console.error('Error fetching tiendas:', e); }
 };
 
@@ -146,7 +156,8 @@ const fetchData = async () => {
     const params = new URLSearchParams({ anio: new Date().getFullYear() });
     if (selectedTienda.value !== 'todas') params.append('tienda_id', selectedTienda.value);
     
-    const res = await fetch(`/api/reportes/ventas?${params}`);
+    const headers = token.value ? { Authorization: `Bearer ${token.value}` } : {};
+    const res = await fetch(`/api/reportes/ventas?${params}`, { headers });
     if (res.ok) {
       const data = await res.json();
       rawRows.value = data.rows;

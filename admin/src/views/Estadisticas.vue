@@ -103,6 +103,9 @@
 import { ref, computed, onMounted } from "vue";
 import AdminLayout from "@/components/layout/AdminLayout.vue";
 import VueApexCharts from 'vue3-apexcharts';
+import { useAuth } from '@/composables/useAuth';
+
+const { token } = useAuth();
 
 // --- Info Live ---
 const stats = ref({ pedidosNuevos: 0, ingresosHoy: 0, bestSeller: null });
@@ -110,7 +113,8 @@ const loading = ref(true);
 
 const fetchStats = async () => {
   try {
-    const res = await fetch('/api/estadisticas/live');
+    const headers = token.value ? { Authorization: `Bearer ${token.value}` } : {};
+    const res = await fetch('/api/estadisticas/live', { headers });
     if (res.ok) stats.value = await res.json();
   } catch (error) { console.error('Error:', error); }
   finally { loading.value = false; }
@@ -130,7 +134,8 @@ const chartCategories = ref([]);
 const fetchChartData = async () => {
   chartLoading.value = true;
   try {
-    const res = await fetch(`/api/estadisticas/ventas-mes?mes=${selectedMes.value}&anio=${selectedAnio.value}`);
+    const headers = token.value ? { Authorization: `Bearer ${token.value}` } : {};
+    const res = await fetch(`/api/estadisticas/ventas-mes?mes=${selectedMes.value}&anio=${selectedAnio.value}`, { headers });
     if (res.ok) {
       const { datos } = await res.json();
       const diasEnMes = new Date(selectedAnio.value, selectedMes.value, 0).getDate();
