@@ -2333,6 +2333,236 @@ app.post('/api/mercadopago/process-payment', async (req, res) => {
   }
 });
 
+// --- PayPal Endpoints ---
+const getPayPalBaseUrl = () => {
+  return process.env.PAYPAL_MODE === 'live'
+    ? 'https://api-m.paypal.com'
+    : 'https://api-m.sandbox.paypal.com';
+};
+
+const getPayPalAccessToken = async () => {
+  const clientId = process.env.PAYPAL_CLIENT_ID;
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error('Credenciales de PayPal no configuradas en el servidor');
+  }
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const response = await fetch(`${getPayPalBaseUrl()}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: 'grant_type=client_credentials'
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Error de autenticación con PayPal: ${errText}`);
+  }
+  const data = await response.json();
+  return data.access_token;
+};
+
+// Obtener configuración pública de PayPal
+app.get('/api/config/paypal', (_req, res) => {
+  res.json({
+    clientId: process.env.PAYPAL_CLIENT_ID || '',
+    mode: process.env.PAYPAL_MODE || 'sandbox'
+  });
+});
+
+// Crear orden de compra en PayPal
+app.post('/api/paypal/create-order', async (req, res) => {
+  try {
+    const { form, items, envio, subtotal, total } = req.body;
+    if (!items || !items.length) {
+      return res.status(400).json({ error: 'El carrito está vacío' });
+    }
+
+    // 🛡️ Validación Antifraude de Totales en BD
+    let computedSubtotal = 0;
+    for (const item of items) {
+      const prodId = item.producto_id || item.id;
+      if (prodId && !isNaN(parseInt(prodId, 10))) {
+        const dbP = await pool.query('SELECT precio, descuento FROM products WHERE id = $1', [parseInt(prodId, 10)]);
+        if (dbP.rows.length > 0) {
+          const basePrice = parseFloat(dbP.rows[0].precio || 0);
+          const desc = parseFloat(dbP.rows[0].descuento || 0);
+          const realPrice = desc > 0 ? basePrice * (1 - desc / 100) : basePrice;
+          computedSubtotal += realPrice * parseInt(item.cantidad || 1);
+        }
+      }
+    }
+    const realSubtotal = computedSubtotal > 0 ? Math.round(computedSubtotal * 100) / 100 : parseFloat(subtotal || 0);
+
+    let realEnvio = parseFloat(envio || 0);
+    if (form && form.pais) {
+      const reglaRes = await pool.query(
+        `SELECT precio_envio FROM reglas_envio WHERE (pais LIKE $1 OR pais = '*') AND deleted_at IS NULL LIMIT 1`,
+        [`%${form.pais}%`]
+      );
+      if (reglaRes.rows.length > 0 && reglaRes.rows[0].precio_envio != null) {
+        realEnvio = parseFloat(reglaRes.rows[0].precio_envio);
+      }
+    }
+    const realTotal = Math.round((realSubtotal + realEnvio) * 100) / 100;
+
+    const accessToken = await getPayPalAccessToken();
+    const orderPayload = {
+      intent: 'CAPTURE',
+      purchase_units: [
+        {
+          amount: {
+            currency_code: 'MXN',
+            value: realTotal.toFixed(2),
+            breakdown: {
+              item_total: {
+                currency_code: 'MXN',
+                value: realSubtotal.toFixed(2)
+              },
+              shipping: {
+                currency_code: 'MXN',
+                value: realEnvio.toFixed(2)
+              }
+            }
+          },
+          description: `Pedido Merch ALV - ${form?.nombre || 'Cliente'}`
+        }
+      ]
+    };
+
+    const response = await fetch(`${getPayPalBaseUrl()}/v2/checkout/orders`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(orderPayload)
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json({ error: data.message || 'Error al crear orden en PayPal', details: data });
+    }
+
+    res.json({ id: data.id });
+  } catch (err) {
+    console.error('Error al crear orden de PayPal:', err);
+    res.status(500).json({ error: err.message || 'Error interno al comunicarse con PayPal' });
+  }
+});
+
+// Capturar pago y registrar pedido
+app.post('/api/paypal/capture-order', async (req, res) => {
+  try {
+    const { orderID, form, items, subtotal, envio, total } = req.body;
+    if (!orderID || !form || !items) {
+      return res.status(400).json({ error: 'Datos incompletos para capturar la orden' });
+    }
+
+    const accessToken = await getPayPalAccessToken();
+    const response = await fetch(`${getPayPalBaseUrl()}/v2/checkout/orders/${orderID}/capture`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const captureData = await response.json();
+    if (!response.ok || captureData.status !== 'COMPLETED') {
+      return res.status(400).json({
+        error: 'El pago no pudo completarse en PayPal',
+        details: captureData
+      });
+    }
+
+    const captureId = captureData.purchase_units?.[0]?.payments?.captures?.[0]?.id || orderID;
+
+    // 🛡️ Validación y recálculo seguro de totales
+    let computedSubtotal = 0;
+    for (const item of (items || [])) {
+      const prodId = item.producto_id || item.id;
+      if (prodId && !isNaN(parseInt(prodId, 10))) {
+        const dbP = await pool.query('SELECT precio, descuento FROM products WHERE id = $1', [parseInt(prodId, 10)]);
+        if (dbP.rows.length > 0) {
+          const basePrice = parseFloat(dbP.rows[0].precio || 0);
+          const desc = parseFloat(dbP.rows[0].descuento || 0);
+          const realPrice = desc > 0 ? basePrice * (1 - desc / 100) : basePrice;
+          computedSubtotal += realPrice * parseInt(item.cantidad || 1);
+        }
+      }
+    }
+    const realSubtotal = computedSubtotal > 0 ? Math.round(computedSubtotal * 100) / 100 : parseFloat(subtotal || 0);
+
+    let realEnvio = parseFloat(envio || 0);
+    if (form && form.pais) {
+      const reglaRes = await pool.query(
+        `SELECT precio_envio FROM reglas_envio WHERE (pais LIKE $1 OR pais = '*') AND deleted_at IS NULL LIMIT 1`,
+        [`%${form.pais}%`]
+      );
+      if (reglaRes.rows.length > 0 && reglaRes.rows[0].precio_envio != null) {
+        realEnvio = parseFloat(reglaRes.rows[0].precio_envio);
+      }
+    }
+    const realTotal = Math.round((realSubtotal + realEnvio) * 100) / 100;
+
+    const parts = [];
+    if (form.calle) parts.push(`${form.calle} ${form.numExt} ${form.numInt ? 'Int. ' + form.numInt : ''}`.trim());
+    if (form.colonia) parts.push(`Col. ${form.colonia}`);
+    if (form.delegacion) parts.push(form.delegacion);
+    if (form.ciudad) parts.push(form.ciudad);
+    if (form.estado) parts.push(form.estado);
+    if (form.cp) parts.push(`C.P. ${form.cp}`);
+    if (form.pais) parts.push(form.pais);
+    const domicilio = parts.join(', ');
+
+    const orden = Math.floor(100000 + Math.random() * 900000).toString();
+    const estadoInicial = 'En proceso';
+
+    const result = await pool.query(
+      `INSERT INTO pedidos (orden, nombre, correo, telefono, pais, estado_env, ciudad, delegacion, calle, num_ext, num_int, colonia, cp, domicilio, notas, items, subtotal, envio, total, estado, motivo_fallo) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) RETURNING *`,
+      [
+        orden, form.nombre, form.correo, form.telefono, form.pais, form.estado, form.ciudad, form.delegacion || null, form.calle, form.numExt, form.numInt || null, form.colonia, form.cp, domicilio, form.notas || null, JSON.stringify(items), realSubtotal, realEnvio, realTotal, estadoInicial, `PayPal ID: ${captureId}`
+      ]
+    );
+
+    const nuevoPedido = result.rows[0];
+
+    // Descontar inventario
+    for (const it of items) {
+      const pid = it.producto_id || it.id;
+      const cant = parseInt(it.cantidad || 1);
+      if (it.variacion_id) {
+        await pool.query('UPDATE product_variations SET stock = GREATEST(0, stock - $1) WHERE id = $2', [cant, it.variacion_id]);
+      } else if (pid) {
+        await pool.query('UPDATE products SET stock = GREATEST(0, stock - $1) WHERE id = $2', [cant, pid]);
+      }
+    }
+
+    // Enviar correo de confirmación
+    try {
+      if (transporter && form.correo) {
+        const mailOptions = {
+          from: `"Merch ALV" <${process.env.SMTP_USER}>`,
+          to: form.correo,
+          subject: `Confirmación de Pedido #${orden} - Merch ALV`,
+          html: `<h2>¡Gracias por tu compra, ${form.nombre}!</h2><p>Hemos recibido tu pago con PayPal exitosamente.</p><p>Tu número de orden es: <strong>#${orden}</strong></p><p>Total pagado: <strong>$${realTotal} MXN</strong></p>`
+        };
+        await transporter.sendMail(mailOptions);
+      }
+    } catch (mailErr) {
+      console.error('Error al enviar correo PayPal:', mailErr.message);
+    }
+
+    res.json({ success: true, pedido: nuevoPedido });
+  } catch (err) {
+    console.error('Error al capturar orden de PayPal:', err);
+    res.status(500).json({ error: err.message || 'Error al procesar cobro en PayPal' });
+  }
+});
+
 
 // --- Configuracion ---
 
