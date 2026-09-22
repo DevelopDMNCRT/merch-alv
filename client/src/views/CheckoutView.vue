@@ -103,19 +103,57 @@
 
             <div v-if="loading" class="text-center font-bold my-4">Procesando pedido...</div>
 
-            <!-- Mercado Pago Payment Section -->
-            <div class="paypal-card-fields-section mt-4" v-if="cartState.items.length > 0">
+            <!-- Sección de Métodos de Pago (Mercado Pago y PayPal) -->
+            <div class="payment-selection-section mt-4" v-if="cartState.items.length > 0">
               <h3>Detalles del Pago</h3>
-              <p class="payment-method-subtitle">Ingresa los datos de tu tarjeta de crédito o débito de manera segura a través de Mercado Pago.</p>
+              <p class="payment-method-subtitle">Selecciona tu método de pago preferido para completar tu compra de forma segura.</p>
 
-              <!-- Banner de Depuración / Estado -->
-              <div v-if="mpDebugMessage" class="paypal-debug-banner" style="background:#fffbeb;border:1px solid #fef3c7;color:#b45309;padding:16px;border-radius:12px;font-size:0.9rem;margin-bottom:20px;font-family:'Jost',sans-serif;font-weight:600;line-height:1.6;white-space:pre-wrap;word-break:break-all;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
-                ⚠️ <strong>Error de Mercado Pago:</strong><br>
-                <span style="font-weight:400;">{{ mpDebugMessage }}</span>
+              <!-- Selector de Pestañas -->
+              <div class="payment-tabs-container">
+                <button 
+                  type="button" 
+                  class="payment-tab-btn" 
+                  :class="{ active: selectedPaymentMethod === 'mercadopago' }"
+                  @click="selectedPaymentMethod = 'mercadopago'"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                  <span>Tarjeta (Mercado Pago)</span>
+                </button>
+                <button 
+                  type="button" 
+                  class="payment-tab-btn" 
+                  :class="{ active: selectedPaymentMethod === 'paypal' }"
+                  @click="onSelectPayPal"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.972.382-1.054.9l-1.116 7.106zm14.146-14.42c-.004-.035-.011-.07-.017-.105.006.035.012.07.017.105z"/></svg>
+                  <span>PayPal</span>
+                </button>
               </div>
 
-              <!-- Contenedor para el Brick de Mercado Pago -->
-              <div id="cardPaymentBrick_container"></div>
+              <!-- Pestaña 1: Mercado Pago (Tarjeta) -->
+              <div v-show="selectedPaymentMethod === 'mercadopago'" class="payment-method-panel">
+                <!-- Banner de Depuración / Estado -->
+                <div v-if="mpDebugMessage" class="paypal-debug-banner" style="background:#fffbeb;border:1px solid #fef3c7;color:#b45309;padding:16px;border-radius:12px;font-size:0.9rem;margin-bottom:20px;font-family:'Jost',sans-serif;font-weight:600;line-height:1.6;white-space:pre-wrap;word-break:break-all;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+                  ⚠️ <strong>Error de Mercado Pago:</strong><br>
+                  <span style="font-weight:400;">{{ mpDebugMessage }}</span>
+                </div>
+
+                <!-- Contenedor para el Brick de Mercado Pago -->
+                <div id="cardPaymentBrick_container"></div>
+              </div>
+
+              <!-- Pestaña 2: PayPal -->
+              <div v-show="selectedPaymentMethod === 'paypal'" class="payment-method-panel paypal-panel">
+                <div v-if="paypalLoading" class="text-center py-6 text-gray-500 font-medium">
+                  Cargando opciones de PayPal...
+                </div>
+                <div v-if="!paypalConfigured && !paypalLoading" class="paypal-unconfigured-banner">
+                  <p class="text-sm">
+                    ℹ️ <strong>Pasarela PayPal lista:</strong> Ingresa tus credenciales (<code>PAYPAL_CLIENT_ID</code> y <code>PAYPAL_CLIENT_SECRET</code>) en el archivo <code>server/.env</code> para habilitar el cobro inmediato con PayPal.
+                  </p>
+                </div>
+                <div id="paypal-button-container" class="mt-3"></div>
+              </div>
             </div>
 
 
@@ -212,6 +250,7 @@
 <script setup>
 import { onMounted, ref, reactive, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { loadScript } from '@paypal/paypal-js'
 import { cartState, cartGetters, cartActions } from '../store/cart.js'
 import { useLocale } from '../composables/useLocale.js'
 import { formatPrice } from '../store/locale.js'
@@ -446,6 +485,130 @@ const updateMapFromAddress = async () => {
 }
 
 const checkoutForm = ref(null)
+
+const selectedPaymentMethod = ref('mercadopago')
+const paypalConfigured = ref(false)
+const paypalLoading = ref(false)
+let paypalSDK = null
+let paypalButtonsRendered = false
+
+const onSelectPayPal = async () => {
+  selectedPaymentMethod.value = 'paypal'
+  if (!paypalButtonsRendered && paypalConfigured.value) {
+    await nextTick()
+    renderPayPalButtons()
+  }
+}
+
+const renderPayPalButtons = async () => {
+  const container = document.getElementById('paypal-button-container')
+  if (!container || paypalButtonsRendered || !paypalSDK) return
+
+  container.innerHTML = ''
+  try {
+    await paypalSDK.Buttons({
+      style: {
+        layout: 'vertical',
+        color: 'gold',
+        shape: 'rect',
+        label: 'paypal'
+      },
+      createOrder: async () => {
+        if (checkoutForm.value && !checkoutForm.value.checkValidity()) {
+          checkoutForm.value.reportValidity()
+          alert('Faltan campos obligatorios en el formulario de envío. Por favor complétalos antes de pagar con PayPal.')
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+          throw new Error('Formulario incompleto')
+        }
+
+        if (!isShippingSupported.value) {
+          alert('Lo sentimos, el envío no está disponible para tu ubicación.')
+          throw new Error('Envío no disponible')
+        }
+
+        const subtotal = cartGetters.totalPrice.value
+        const envio = costoEnvio.value
+        const total = subtotal + envio
+
+        const items = cartState.items.map(item => ({
+          id: item.cartItemId,
+          producto_id: item.id,
+          nombre: item.name,
+          variante: item.size,
+          imagen: item.image,
+          precio: item.price,
+          cantidad: item.quantity
+        }))
+
+        const res = await fetch('/api/paypal/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ form, items, subtotal, envio, total })
+        })
+
+        if (!res.ok) {
+          const errData = await res.json()
+          throw new Error(errData.error || 'Error al crear la orden de PayPal')
+        }
+
+        const data = await res.json()
+        return data.id
+      },
+      onApprove: async (data) => {
+        loading.value = true
+        try {
+          const subtotal = cartGetters.totalPrice.value
+          const envio = costoEnvio.value
+          const total = subtotal + envio
+
+          const items = cartState.items.map(item => ({
+            id: item.cartItemId,
+            producto_id: item.id,
+            nombre: item.name,
+            variante: item.size,
+            imagen: item.image,
+            precio: item.price,
+            cantidad: item.quantity
+          }))
+
+          const res = await fetch('/api/paypal/capture-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderID: data.orderID,
+              form,
+              items,
+              subtotal,
+              envio,
+              total
+            })
+          })
+
+          if (!res.ok) {
+            const errData = await res.json()
+            throw new Error(errData.error || 'Error al capturar el pago en PayPal')
+          }
+
+          alert('¡Pedido confirmado exitosamente con PayPal!')
+          cartActions.clearCart()
+          router.push('/pago-resultado')
+        } catch (error) {
+          console.error('Error al capturar pago con PayPal:', error)
+          alert(`Hubo un problema al procesar el pago con PayPal: ${error.message}`)
+        } finally {
+          loading.value = false
+        }
+      },
+      onError: (error) => {
+        console.error('Error en botón PayPal:', error)
+      }
+    }).render('#paypal-button-container')
+
+    paypalButtonsRendered = true
+  } catch (err) {
+    console.error('Error al renderizar PayPal Buttons:', err)
+  }
+}
 
 const mpDebugMessage = ref('')
 const loading = ref(false)
@@ -693,6 +856,26 @@ onMounted(async () => {
   } catch (error) {
     mpDebugMessage.value = `Error en pasarela: ${error.message}`;
     console.error("MercadoPago Init Error:", error);
+  }
+
+  // Consultar configuración de PayPal
+  try {
+    paypalLoading.value = true
+    const ppRes = await fetch('/api/config/paypal')
+    if (ppRes.ok) {
+      const ppData = await ppRes.json()
+      if (ppData.clientId) {
+        paypalConfigured.value = true
+        paypalSDK = await loadScript({
+          clientId: ppData.clientId,
+          currency: 'MXN'
+        })
+      }
+    }
+  } catch (err) {
+    console.warn('PayPal no disponible:', err.message)
+  } finally {
+    paypalLoading.value = false
   }
 });
 
@@ -1209,9 +1392,71 @@ textarea.form-input {
   display: block;
 }
 
-/* Spinner */
-.animate-spin {
-  animation: spin 1s linear infinite;
+/* Selector de Métodos de Pago (Pestañas) */
+.payment-selection-section {
+  border-top: 1px solid var(--border-color);
+  padding-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.payment-tabs-container {
+  display: flex;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+}
+
+.payment-tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: 'Jost', sans-serif;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.payment-tab-btn:hover {
+  color: var(--text-main);
+}
+
+.payment-tab-btn.active {
+  background: var(--bg-color);
+  color: var(--text-main);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.paypal-panel {
+  padding: 8px 0;
+}
+
+.paypal-unconfigured-banner {
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px dashed rgba(59, 130, 246, 0.3);
+  color: var(--text-main);
+  padding: 18px 20px;
+  border-radius: 12px;
+  font-family: 'Jost', sans-serif;
+  line-height: 1.6;
+}
+
+.paypal-unconfigured-banner code {
+  background: rgba(0, 0, 0, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
 }
 
 @keyframes spin {
