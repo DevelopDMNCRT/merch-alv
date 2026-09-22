@@ -822,6 +822,21 @@ const seleccionarHsCode = (item) => {
   mostrarModalHs.value = false;
 };
 
+const formatErrorMessage = (err) => {
+  if (!err) return 'Error desconocido al guardar el producto';
+  if (typeof err === 'string') return err;
+  const data = err.response?.data;
+  if (data) {
+    if (typeof data === 'string') return data;
+    const msg = data.error || data.message || data.msg;
+    const details = data.details;
+    const cleanMsg = (typeof msg === 'object' && msg !== null) ? JSON.stringify(msg) : (msg || 'Error al guardar el producto');
+    const cleanDetails = (typeof details === 'object' && details !== null) ? JSON.stringify(details) : (details || '');
+    return cleanDetails ? `${cleanMsg}\n${cleanDetails}` : cleanMsg;
+  }
+  return err.message || 'Error de conexión con el servidor';
+};
+
 const guardar = async () => {
   if (!form.nombre.trim()) {
     alert('El nombre del producto es requerido');
@@ -832,6 +847,30 @@ const guardar = async () => {
     return;
   }
   if (imagenError.value || galeriaError.value) return;
+
+  if (form.esVariable) {
+    if (!form.variaciones || form.variaciones.length === 0) {
+      alert('Debes generar o agregar al menos una variación para un producto variable.');
+      return;
+    }
+    for (let i = 0; i < form.variaciones.length; i++) {
+      const v = form.variaciones[i];
+      if (!v.valor || !v.valor.trim()) {
+        alert(`La variación #${i + 1} requiere un nombre o combinación definida (ej. "Rojo" o "M - Azul").`);
+        return;
+      }
+      const p = (v.precio !== '' && v.precio !== null && v.precio !== undefined) ? v.precio : form.precio;
+      if (p === '' || p === null || isNaN(parseFloat(p)) || parseFloat(p) < 0) {
+        alert(`La variación "${v.valor}" debe tener un precio numérico válido.`);
+        return;
+      }
+      const s = (v.stock !== '' && v.stock !== null && v.stock !== undefined) ? v.stock : '0';
+      if (isNaN(parseInt(s, 10)) || parseInt(s, 10) < 0) {
+        alert(`La variación "${v.valor}" debe tener un stock válido.`);
+        return;
+      }
+    }
+  }
 
   guardando.value = true;
   try {
@@ -860,11 +899,11 @@ const guardar = async () => {
     if (form.esVariable && form.variaciones.length > 0) {
       // Serialize variations: use imagen_url for existing images (not blob previews)
       const varsForJson = form.variaciones.map(v => ({
-        valor:      v.valor,
-        precio:     (v.precio !== '' && v.precio !== null && v.precio !== undefined) ? v.precio : (form.precio || '0'),
-        stock:      (v.stock !== '' && v.stock !== null && v.stock !== undefined) ? v.stock : '0',
-        peso:       v.peso || form.peso || '0',
-        color:      v.color,
+        valor:      v.valor.trim(),
+        precio:     (v.precio !== '' && v.precio !== null && v.precio !== undefined) ? parseFloat(v.precio) : (parseFloat(form.precio) || 0),
+        stock:      (v.stock !== '' && v.stock !== null && v.stock !== undefined) ? parseInt(v.stock, 10) : 0,
+        peso:       (v.peso !== '' && v.peso !== null && v.peso !== undefined) ? parseFloat(v.peso) : (parseFloat(form.peso) || 0),
+        color:      v.color || '#000000',
         imagen_url: v.imagen instanceof File ? null : (v.imagenPreview && !v.imagenPreview.startsWith('blob:') ? v.imagenPreview : null)
       }));
 
@@ -897,9 +936,7 @@ const guardar = async () => {
     router.push('/productos');
   } catch (err) {
     console.error('Error saving product:', err);
-    const details = err.response?.data?.details || '';
-    const errorMsg = err.response?.data?.error || 'Error al guardar el producto';
-    alert(`${errorMsg}\n${details}`);
+    alert(formatErrorMessage(err));
   } finally {
     guardando.value = false;
   }

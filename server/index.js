@@ -432,11 +432,47 @@ app.post('/api/products', upload.any(), async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const productSlug = slug || nombre
+    // Parse and validate variations if variable product
+    let parsedVars = [];
+    if (es_variable === 'true') {
+      if (typeof variaciones === 'string') {
+        try {
+          parsedVars = JSON.parse(variaciones);
+        } catch (e) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'El formato de las variaciones es inválido', details: e.message });
+        }
+      } else if (Array.isArray(variaciones)) {
+        parsedVars = variaciones;
+      }
+
+      if (!Array.isArray(parsedVars) || parsedVars.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Un producto variable debe incluir al menos una variación' });
+      }
+
+      for (let i = 0; i < parsedVars.length; i++) {
+        const v = parsedVars[i];
+        if (!v || !v.valor || !v.valor.toString().trim()) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: `La variación #${i + 1} requiere un nombre o combinación válida` });
+        }
+      }
+    }
+
+    const baseSlug = slug || nombre
       .toLowerCase()
       .normalize("NFD").replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-');
+
+    let productSlug = baseSlug;
+    let slugCounter = 1;
+    while (true) {
+      const existingSlug = await client.query('SELECT id FROM products WHERE slug = $1 AND deleted_at IS NULL', [productSlug]);
+      if (existingSlug.rows.length === 0) break;
+      productSlug = `${baseSlug}-${slugCounter++}`;
+    }
 
     const result = await client.query(
       `INSERT INTO products (nombre, descripcion, precio, stock, envio_especial, es_variable, es_publico, slug, imagen_url, galeria_urls, atributos, tienda, flag, preventa_inicio, preventa_fin, peso, descuento, hs_code)
@@ -459,16 +495,25 @@ app.post('/api/products', upload.any(), async (req, res) => {
 
     const product = result.rows[0];
 
-    if (es_variable === 'true' && variaciones) {
-      const vars = JSON.parse(variaciones);
-      for (let i = 0; i < vars.length; i++) {
-        const v = vars[i];
-        // Use newly uploaded Cloudinary URL, or existing URL (not blobs)
+    if (es_variable === 'true' && parsedVars.length > 0) {
+      for (let i = 0; i < parsedVars.length; i++) {
+        const v = parsedVars[i];
         const varImg = varImgMap[i] || (v.imagen_url && !v.imagen_url.startsWith('blob:') ? v.imagen_url : null);
+        const varPrecio = (v.precio !== undefined && v.precio !== null && v.precio !== '') ? parseFloat(v.precio) : (precio ? parseFloat(precio) : null);
+        const varStock = (v.stock !== undefined && v.stock !== null && v.stock !== '') ? parseInt(v.stock, 10) : 0;
+        const varPeso = (v.peso !== undefined && v.peso !== null && v.peso !== '') ? parseFloat(v.peso) : (peso ? parseFloat(peso) : 0);
         await client.query(
           `INSERT INTO product_variations (product_id, valor, precio, stock, color, imagen_url, peso)
            VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [product.id, v.valor, v.precio ? parseFloat(v.precio) : null, v.stock ? parseInt(v.stock) : 0, v.color || null, varImg, v.peso ? parseFloat(v.peso) : 0]
+          [
+            product.id,
+            v.valor.toString().trim(),
+            isNaN(varPrecio) ? null : varPrecio,
+            isNaN(varStock) ? 0 : varStock,
+            v.color || null,
+            varImg,
+            isNaN(varPeso) ? 0 : varPeso
+          ]
         );
       }
     }
@@ -477,8 +522,11 @@ app.post('/api/products', upload.any(), async (req, res) => {
     res.status(201).json(product);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: 'Failed to create product', details: err.message });
+    console.error('Error creating product:', err);
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Ya existe un producto con ese slug o identificador único', details: err.detail });
+    }
+    res.status(500).json({ error: 'Error al crear el producto', details: err.message });
   } finally {
     client.release();
   }
@@ -502,11 +550,47 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const productSlug = slug || nombre
+    // Parse and validate variations if variable product
+    let parsedVars = [];
+    if (es_variable === 'true') {
+      if (typeof variaciones === 'string') {
+        try {
+          parsedVars = JSON.parse(variaciones);
+        } catch (e) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'El formato de las variaciones es inválido', details: e.message });
+        }
+      } else if (Array.isArray(variaciones)) {
+        parsedVars = variaciones;
+      }
+
+      if (!Array.isArray(parsedVars) || parsedVars.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Un producto variable debe incluir al menos una variación' });
+      }
+
+      for (let i = 0; i < parsedVars.length; i++) {
+        const v = parsedVars[i];
+        if (!v || !v.valor || !v.valor.toString().trim()) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: `La variación #${i + 1} requiere un nombre o combinación válida` });
+        }
+      }
+    }
+
+    const baseSlug = slug || nombre
       .toLowerCase()
       .normalize("NFD").replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-');
+
+    let productSlug = baseSlug;
+    let slugCounter = 1;
+    while (true) {
+      const existingSlug = await client.query('SELECT id FROM products WHERE slug = $1 AND id != $2 AND deleted_at IS NULL', [productSlug, id]);
+      if (existingSlug.rows.length === 0) break;
+      productSlug = `${baseSlug}-${slugCounter++}`;
+    }
 
     const existing = await client.query('SELECT imagen_url, galeria_urls FROM products WHERE id = $1', [id]);
     if (existing.rows.length === 0) throw new Error('Product not found');
@@ -544,15 +628,25 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
     const product = result.rows[0];
 
     await client.query('DELETE FROM product_variations WHERE product_id = $1', [id]);
-    if (es_variable === 'true' && variaciones) {
-      const vars = JSON.parse(variaciones);
-      for (let i = 0; i < vars.length; i++) {
-        const v = vars[i];
+    if (es_variable === 'true' && parsedVars.length > 0) {
+      for (let i = 0; i < parsedVars.length; i++) {
+        const v = parsedVars[i];
         const varImg = varImgMap[i] || (v.imagen_url && !v.imagen_url.startsWith('blob:') ? v.imagen_url : null);
+        const varPrecio = (v.precio !== undefined && v.precio !== null && v.precio !== '') ? parseFloat(v.precio) : (precio ? parseFloat(precio) : null);
+        const varStock = (v.stock !== undefined && v.stock !== null && v.stock !== '') ? parseInt(v.stock, 10) : 0;
+        const varPeso = (v.peso !== undefined && v.peso !== null && v.peso !== '') ? parseFloat(v.peso) : (peso ? parseFloat(peso) : 0);
         await client.query(
           `INSERT INTO product_variations (product_id, valor, precio, stock, color, imagen_url, peso)
            VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [product.id, v.valor, v.precio ? parseFloat(v.precio) : null, v.stock ? parseInt(v.stock) : 0, v.color || null, varImg, v.peso ? parseFloat(v.peso) : 0]
+          [
+            product.id,
+            v.valor.toString().trim(),
+            isNaN(varPrecio) ? null : varPrecio,
+            isNaN(varStock) ? 0 : varStock,
+            v.color || null,
+            varImg,
+            isNaN(varPeso) ? 0 : varPeso
+          ]
         );
       }
     }
@@ -561,8 +655,11 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
     res.json(product);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: 'Failed to update product', details: err.message });
+    console.error('Error updating product:', err);
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Ya existe un producto con ese slug o identificador único', details: err.detail });
+    }
+    res.status(500).json({ error: 'Error al actualizar el producto', details: err.message });
   } finally {
     client.release();
   }
